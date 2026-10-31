@@ -9,6 +9,77 @@
 #define MINN ((U)1 << MB) // smallest normal
 #define VK(v) ((VT){} + (T)(v))
 #define K(v) ((T)(v))
+#if defined(__clang__)
+#define EL_ABS(x)        __builtin_elementwise_abs(x)
+#define EL_SQRT(x)       __builtin_elementwise_sqrt(x)
+#define EL_FMA(a, b, c)  __builtin_elementwise_fma(a, b, c)
+#define EL_RINT(x)       __builtin_elementwise_rint(x)
+#define EL_CEIL(x)       __builtin_elementwise_ceil(x)
+#define EL_FLOOR(x)      __builtin_elementwise_floor(x)
+#define EL_TRUNC(x)      __builtin_elementwise_trunc(x)
+#define EL_ROUND(x)      __builtin_elementwise_round(x)
+#define VEL_ABS(x)       __builtin_elementwise_abs(x)
+#define VEL_SQRT(x)      __builtin_elementwise_sqrt(x)
+#define VEL_FMA(a, b, c) __builtin_elementwise_fma(a, b, c)
+#define VEL_RINT(x)      __builtin_elementwise_rint(x)
+#define VEL_CEIL(x)      __builtin_elementwise_ceil(x)
+#define VEL_FLOOR(x)     __builtin_elementwise_floor(x)
+#define VEL_TRUNC(x)     __builtin_elementwise_trunc(x)
+#define VEL_ROUND(x)     __builtin_elementwise_round(x)
+#define VRED_OR(v)       __builtin_reduce_or(v)
+#else
+SI T FN(el_abs)(T x) { return sizeof(T) == 4 ? __builtin_fabsf((float)x) : __builtin_fabs((double)x); }
+SI T FN(el_sqrt)(T x) { return sizeof(T) == 4 ? __builtin_sqrtf((float)x) : __builtin_sqrt((double)x); }
+SI T FN(el_fma)(T a, T b, T c) { return sizeof(T) == 4 ? __builtin_fmaf((float)a, (float)b, (float)c) : __builtin_fma((double)a, (double)b, (double)c); }
+SI T FN(el_rint)(T x) { return sizeof(T) == 4 ? __builtin_rintf((float)x) : __builtin_rint((double)x); }
+SI T FN(el_ceil)(T x) { return sizeof(T) == 4 ? __builtin_ceilf((float)x) : __builtin_ceil((double)x); }
+SI T FN(el_floor)(T x) { return sizeof(T) == 4 ? __builtin_floorf((float)x) : __builtin_floor((double)x); }
+SI T FN(el_trunc)(T x) { return sizeof(T) == 4 ? __builtin_truncf((float)x) : __builtin_trunc((double)x); }
+SI T FN(el_round)(T x) { return sizeof(T) == 4 ? __builtin_roundf((float)x) : __builtin_round((double)x); }
+SI VT FN(vel_abs)(VT x) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_abs)(x[i]); return r; }
+SI VT FN(vel_sqrt)(VT x) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_sqrt)(x[i]); return r; }
+SI VT FN(vel_fma)(VT a, VT b, VT c) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_fma)(a[i], b[i], c[i]); return r; }
+SI VT FN(vel_rint)(VT x) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_rint)(x[i]); return r; }
+SI VT FN(vel_ceil)(VT x) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_ceil)(x[i]); return r; }
+SI VT FN(vel_floor)(VT x) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_floor)(x[i]); return r; }
+SI VT FN(vel_trunc)(VT x) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_trunc)(x[i]); return r; }
+SI VT FN(vel_round)(VT x) { VT r; for (int i = 0; i < NL; ++i) r[i] = FN(el_round)(x[i]); return r; }
+SI int FN(vred_or)(VTS v) { U acc = 0; for (int i = 0; i < NL; ++i) acc |= (U)v[i]; return acc != 0; }
+#undef EL_ABS
+#undef EL_SQRT
+#undef EL_FMA
+#undef EL_RINT
+#undef EL_CEIL
+#undef EL_FLOOR
+#undef EL_TRUNC
+#undef EL_ROUND
+#undef VEL_ABS
+#undef VEL_SQRT
+#undef VEL_FMA
+#undef VEL_RINT
+#undef VEL_CEIL
+#undef VEL_FLOOR
+#undef VEL_TRUNC
+#undef VEL_ROUND
+#undef VRED_OR
+#define EL_ABS(x)        FN(el_abs)(x)
+#define EL_SQRT(x)       FN(el_sqrt)(x)
+#define EL_FMA(a, b, c)  FN(el_fma)(a, b, c)
+#define EL_RINT(x)       FN(el_rint)(x)
+#define EL_CEIL(x)       FN(el_ceil)(x)
+#define EL_FLOOR(x)      FN(el_floor)(x)
+#define EL_TRUNC(x)      FN(el_trunc)(x)
+#define EL_ROUND(x)      FN(el_round)(x)
+#define VEL_ABS(x)       FN(vel_abs)(x)
+#define VEL_SQRT(x)      FN(vel_sqrt)(x)
+#define VEL_FMA(a, b, c) FN(vel_fma)(a, b, c)
+#define VEL_RINT(x)      FN(vel_rint)(x)
+#define VEL_CEIL(x)      FN(vel_ceil)(x)
+#define VEL_FLOOR(x)     FN(vel_floor)(x)
+#define VEL_TRUNC(x)     FN(vel_trunc)(x)
+#define VEL_ROUND(x)     FN(vel_round)(x)
+#define VRED_OR(v)       FN(vred_or)(v)
+#endif
 
 SI U FN(fb)(T x) { U u; memcpy(&u, &x, sizeof u); return u; }
 SI T FN(fv)(U u) { T x; memcpy(&x, &u, sizeof x); return x; }
@@ -56,21 +127,44 @@ SN T FN(nan3)(Cpu *c, T a, T b, T d) {
 #define FCALC(op, a, b, d, KK)                                                                       \
     ((op) == FOP_ADD ? (a) + (b) : (op) == FOP_SUB ? (a) - (b)                                     \
    : (op) == FOP_MUL || (op) == FOP_MULX ? (a) * (b) : (op) == FOP_NMUL ? -((a) * (b))              \
-   : (op) == FOP_DIV ? (a) / (b) : (op) == FOP_ABD ? __builtin_elementwise_abs((a) - (b))          \
-   : (op) == FOP_SQRT ? __builtin_elementwise_sqrt(a)                                              \
-   : (op) == FOP_MADD ? __builtin_elementwise_fma(b, d, a)                                         \
-   : (op) == FOP_RECPS ? __builtin_elementwise_fma(a, b, KK(2))                                    \
-   : (op) == FOP_RSQRTS ? __builtin_elementwise_fma(a, b, KK(3)) * KK(0.5) : (a))
+   : (op) == FOP_DIV ? (a) / (b) : (op) == FOP_ABD ? EL_ABS((a) - (b))                             \
+   : (op) == FOP_SQRT ? EL_SQRT(a)                                                                 \
+   : (op) == FOP_MADD ? EL_FMA(b, d, a)                                                            \
+   : (op) == FOP_RECPS ? EL_FMA(a, b, KK(2))                                                       \
+   : (op) == FOP_RSQRTS ? EL_FMA(a, b, KK(3)) * KK(0.5) : (a))
+
+SI VT FN(vfcalc)(int op, VT a, VT b, VT d) {
+    switch (op) {
+    case FOP_ADD:    return a + b;
+    case FOP_SUB:    return a - b;
+    case FOP_MUL:
+    case FOP_MULX:   return a * b;
+    case FOP_NMUL:   return -(a * b);
+    case FOP_DIV:    return a / b;
+    case FOP_ABD:    return VEL_ABS(a - b);
+    case FOP_SQRT:   return VEL_SQRT(a);
+    case FOP_MADD:   return VEL_FMA(b, d, a);
+    case FOP_RECPS:  return VEL_FMA(a, b, VK(2));
+    case FOP_RSQRTS: return VEL_FMA(a, b, VK(3)) * VK(0.5);
+    default:         return a;
+    }
+}
 
 // Lanes whose fast result needs fixing: NaN results (NaN operand or invalid op), RSQRTS overflow.
-#define FBAD(op, r) ((op) == FOP_RSQRTS ? ((r) != (r)) | (__builtin_elementwise_abs(r) == K(INFINITY)) : (r) != (r))
+#define FBAD(op, r) ((op) == FOP_RSQRTS ? ((r) != (r)) | (EL_ABS(r) == K(INFINITY)) : (r) != (r))
+SI VTS FN(vfbad)(int op, VT r) {
+    if (op == FOP_RSQRTS) return (r != r) | (VEL_ABS(r) == VK(INFINITY));
+    return r != r;
+}
+#define VFCALC(op, a, b, d, KK) FN(vfcalc)((op), (a), (b), (d))
+#define VFBAD(op, r) FN(vfbad)((op), (r))
 
 // (3 + a*b) / 2 with one rounding (a already negated): halve a normal operand first, so a product beyond
 // the format's range (which the fast path rounds to inf, or to the largest normal when rounding down) is exact.
 SN T FN(rsqrts)(T a, T b) {
-    if (__builtin_elementwise_abs(a) >= FN(fv)(2 * MINN)) return __builtin_elementwise_fma(a * K(0.5), b, K(1.5));
-    if (__builtin_elementwise_abs(b) >= FN(fv)(2 * MINN)) return __builtin_elementwise_fma(a, b * K(0.5), K(1.5));
-    return __builtin_elementwise_fma(a, b, K(3)) * K(0.5);
+    if (EL_ABS(a) >= FN(fv)(2 * MINN)) return EL_FMA(a * K(0.5), b, K(1.5));
+    if (EL_ABS(b) >= FN(fv)(2 * MINN)) return EL_FMA(a, b * K(0.5), K(1.5));
+    return EL_FMA(a, b, K(3)) * K(0.5);
 }
 
 // ARM result for a lane flagged by FBAD (operands already flushed).
@@ -174,7 +268,7 @@ SI VT FN(vop)(Cpu *c, int op, VT a, VT b, VT d) {
     VT r;
     if (FMINMAX(op)) {
         a = FN(vfz)(c, a), b = FN(vfz)(c, b);   // the result is an operand's bits: flushed as ARM's FZ would
-        if (__builtin_expect(__builtin_reduce_or((a != a) | (b != b)) != 0, 0)) return FN(vslow)(c, op, a, b, d);
+        if (__builtin_expect(VRED_OR((a != a) | (b != b)) != 0, 0)) return FN(vslow)(c, op, a, b, d);
         VTU x = (VTU)a, y = (VTU)b;
         if (op == FOP_MAX || op == FOP_MAXNM)
             r = (VT)FN(vsel)(a > b, x, FN(vsel)(a == b, x & y, y));
@@ -182,8 +276,8 @@ SI VT FN(vop)(Cpu *c, int op, VT a, VT b, VT d) {
             r = (VT)FN(vsel)(a < b, x, FN(vsel)(a == b, x | y, y));
         return r;
     }
-    r = FCALC(op, a, b, d, VK);
-    if (__builtin_expect(__builtin_reduce_or(FBAD(op, r)) != 0, 0)) return FN(vslow)(c, op, a, b, d);
+    r = VFCALC(op, a, b, d, VK);
+    if (__builtin_expect(VRED_OR(VFBAD(op, r)) != 0, 0)) return FN(vslow)(c, op, a, b, d);
     return r;
 }
 
@@ -204,7 +298,7 @@ SI uint64_t FN(cmp)(Cpu *c, T a, T b) { // FCMP NZCV
 // FCMEQ/FCMGE/FCMGT/FACGE/FACGT (op 0..4)
 SI VTU FN(vcmp)(Cpu *c, int op, VT a, VT b) {
     a = FN(vfz)(c, a), b = FN(vfz)(c, b);
-    if (op >= 3) a = __builtin_elementwise_abs(a), b = __builtin_elementwise_abs(b);
+    if (op >= 3) { a = VEL_ABS(a); b = VEL_ABS(b); }
     switch (op) {
     case 0: return (VTU)(a == b);
     case 1: case 3: return (VTU)(a >= b);
@@ -216,11 +310,11 @@ SI VTU FN(vcmp)(Cpu *c, int op, VT a, VT b) {
 // (rint = ties-to-even: the host stays in round-to-nearest outside the slow paths; no roundeven in MinGW's CRT)
 SI T FN(rnd)(T x, int rm) {
     switch (rm) {
-    case 0: return __builtin_elementwise_rint(x);
-    case 1: return __builtin_elementwise_ceil(x);
-    case 2: return __builtin_elementwise_floor(x);
-    case 3: return __builtin_elementwise_trunc(x);
-    default: return __builtin_elementwise_round(x);
+    case 0: return EL_RINT(x);
+    case 1: return EL_CEIL(x);
+    case 2: return EL_FLOOR(x);
+    case 3: return EL_TRUNC(x);
+    default: return EL_ROUND(x);
     }
 }
 SI T FN(frint)(Cpu *c, T x, int rm) {
@@ -235,13 +329,13 @@ SI VT FN(vfrint)(Cpu *c, VT x, int rm) {
     if (rm >= 5) rm = (int)((c->fpcr >> 22) & 3);
     VT r;
     switch (rm) {
-    case 0: r = __builtin_elementwise_rint(x); break;
-    case 1: r = __builtin_elementwise_ceil(x); break;
-    case 2: r = __builtin_elementwise_floor(x); break;
-    case 3: r = __builtin_elementwise_trunc(x); break;
-    default: r = __builtin_elementwise_round(x); break;
+    case 0: r = VEL_RINT(x); break;
+    case 1: r = VEL_CEIL(x); break;
+    case 2: r = VEL_FLOOR(x); break;
+    case 3: r = VEL_TRUNC(x); break;
+    default: r = VEL_ROUND(x); break;
     }
-    if (__builtin_expect(__builtin_reduce_or(r != r) != 0, 0))
+    if (__builtin_expect(VRED_OR(r != r) != 0, 0))
         for (int i = 0; i < NL; i++)
             if (r[i] != r[i]) r[i] = FN(nan1)(c, x[i]);
     return r;

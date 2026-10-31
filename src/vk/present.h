@@ -15,6 +15,13 @@ void vkp_resized(void);             // the window changed size: the swapchain is
 uint64_t vkp_presented(void);       // frames shown so far
 uint64_t vkp_frames(void);          // frames the game presented so far
 int vkp_active(void);               // a window with a swapchain is there (else the replayer skips the copy)
+void vkp_perf_stats(uint64_t *lock_ns, uint64_t *submit_ns, uint64_t *present_ns);
+
+// Direct single-submit presentation pipeline:
+// Acquires the next swapchain image, returning semaphores and fences to bind to the main frame submission.
+int vkp_acquire_direct(VkImage *out_image, VkSemaphore *out_wait, VkSemaphore *out_signal,
+                       VkFence *out_fence, uint32_t *out_idx, unsigned *out_slot, VkExtent2D *out_extent);
+void vkp_present_direct(uint32_t idx, unsigned slot);
 
 // Output images (replay thread): acquire one of width x height (B8G8R8A8_UNORM, created / resized here), record the
 // copy of the game's frame into it (layout UNDEFINED -> TRANSFER_DST -> TRANSFER_SRC), then hand it over with the

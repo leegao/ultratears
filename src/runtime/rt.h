@@ -2,6 +2,7 @@
 // Structure follows LASRecomp runtime/rt.h (MIT); the layout and module set are TOTK's.
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdio.h>
 
 #include "cpu.h"
@@ -40,11 +41,23 @@ extern int g_nmodules;
 void loader_load(const char *exefs_dir);
 uint64_t loader_find_symbol(const char *name);
 const char *loader_symbol_at(uint64_t addr, uint64_t *offset);
+const char *loader_module_at(uint64_t addr, uint64_t *offset);
 
 // ---- dispatch.c
 typedef void (*HostFn)(Cpu *c);
+
+// Global O(1) direct-mapped shadow dispatch cache used by ShadowDispatchTablePass
+// in lifted LLVM IR (`@g_icache_pc` and `@g_icache_fn`, indexed by `(pc >> 2) & 65535`).
+#define G_ICACHE_SIZE 65536
+#define G_ICACHE_MASK (G_ICACHE_SIZE - 1)
+extern uint64_t g_icache_pc[G_ICACHE_SIZE];
+extern GuestFn  g_icache_fn[G_ICACHE_SIZE];
+
 void dispatch_init(void);
+void dispatch_register_fast(uint64_t addr, GuestFn fn);
 GuestFn dispatch_lookup(uint64_t addr);
+uint64_t rt_guest_fn_at(uint64_t addr, uint64_t *offset);
+const char *rt_format_guest_addr(uint64_t addr, char *buf, size_t cap);
 uint64_t hle_register(const char *name, HostFn fn);  // returns the fake guest address
 HostFn hle_lookup_impl(const char *name);
 uint64_t hle_register_entry(const char *name, const void *entry);  // a registry entry (hle.h HleImplEntry)

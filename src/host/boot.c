@@ -4,6 +4,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "host.h"
 #include "version.h"   // build/version.h (tools/build_game.py, tools/version.py)
@@ -35,30 +36,39 @@ __attribute__((constructor(101))) static void claim_guest_window(void) { g_windo
 
 static void *game_main(void *unused);
 
-// The game's folder (tools/setup.py makes it: data\\, userdata\\, ultratears.cfg, UltraTears.exe) becomes the working
-// directory: the exe's folder, or its parent for build\\UltraTears.exe. Every path below is relative to it; the defaults
-// are setup.py's layout (data\\exefs, data\\romfs, data\\shaders\\ryujinx, data\\textures, data\\fonts, userdata).
+// The game's folder (tools/setup.py makes it: data/, userdata/, ultratears.cfg, UltraTears) becomes the working
+// directory: the exe's folder, or its parent for build/UltraTears. Every path below is relative to it; the defaults
+// are setup.py's layout (data/exefs, data/romfs, data/shaders/ryujinx, data/textures, data/fonts, userdata).
 // ultratears.cfg there may name other places: lines "name=value" give the ExeFS (exefs=), the RomFS image (romfs=),
 // shaders, texture cache, saves and fonts, each as the TOTK_* variable it stands for unless that is already set (a
 // TOTK_* line sets one directly).
 static char g_exefs[4096];
 static const char *default_exefs(void) {
     const char *exefs = "data/exefs";
+    char path[4096] = {0};
 #ifdef _WIN32
-    char path[MAX_PATH];
     DWORD n = GetModuleFileNameA(NULL, path, sizeof path);
     char *slash = n && n < sizeof path ? strrchr(path, '\\') : NULL;
+    char sep = '\\';
+#else
+    char *slash = plat_exe_path(path, sizeof path) ? strrchr(path, '/') : NULL;
+    char sep = '/';
+#endif
     if (!slash) return exefs;
     *slash = 0;
-    char cfg[MAX_PATH + 32];
-    snprintf(cfg, sizeof cfg, "%s\\ultratears.cfg", path);
+    char cfg[4096 + 32];
+    snprintf(cfg, sizeof cfg, "%s%cultratears.cfg", path, sep);
     FILE *f = fopen(cfg, "r");
-    if (!f && (slash = strrchr(path, '\\')) && !_stricmp(slash, "\\build")) {   // build\\UltraTears.exe: the folder above
+    if (!f && (slash = strrchr(path, sep)) && !_stricmp(slash + 1, "build")) {   // build/UltraTears: the folder above
         *slash = 0;
-        snprintf(cfg, sizeof cfg, "%s\\ultratears.cfg", path);
+        snprintf(cfg, sizeof cfg, "%s%cultratears.cfg", path, sep);
         f = fopen(cfg, "r");
     }
+#ifdef _WIN32
     if (!SetCurrentDirectoryA(path)) fprintf(stderr, "[totk] cannot enter %s\n", path);
+#else
+    if (chdir(path) != 0) fprintf(stderr, "[totk] cannot enter %s\n", path);
+#endif
     if (f) {
         char line[4600];
         while (fgets(line, sizeof line, f)) {
@@ -77,9 +87,9 @@ static const char *default_exefs(void) {
         }
         fclose(f);
         fprintf(stderr, "[totk] game folder %s (%s)\n", path, cfg);
-    } else
+    } else {
         fprintf(stderr, "[totk] game folder %s (no ultratears.cfg: setup.py's layout)\n", path);
-#endif
+    }
     return exefs;
 }
 

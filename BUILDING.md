@@ -20,7 +20,7 @@ tools-only preparation command, so the ExeFS and RomFS must already be available
 | Tool | Version used | Notes |
 |---|---|---|
 | Windows 10/11 x64 | | |
-| Python | Any maintained Python 3 to start `tools/setup.py`; its local Python 3.14 is downloaded automatically | The build uses the downloaded Python with `lz4`, `capstone` and `unicorn` |
+| Python | Any maintained Python 3 to start `tools/setup.py`; its local Python 3.14 is downloaded automatically | The C++17 LLVM IR lifter (`src/horizon2llvm/`) has built-in LZ4 decompression and AArch64 symbolic analysis (no external Python packages needed) |
 | Build tools | downloaded automatically | Python 3.14, the trimmed MSYS2 CLANG64 toolchain and `ultrs-shaders.exe` are taken from the latest builder release |
 | git | | for the clone |
 
@@ -59,7 +59,7 @@ The steps, what they write and how long they take on an 8-core PC:
 |---|---|---|---|
 | `check` | nothing: checks the tools, the SHA-256 of `exefs\main`, `subsdk0`, `sdk` (1.4.3) and refuses encrypted packages | seconds | always |
 | `romfs` | `data\romfs\romfs.bin` + index: the RomFS folder in one file, read with 16 threads; its content hash is checked against 1.4.3 | ~4 min | the image is missing |
-| `lift` | `data\exefs` (a copy of the code modules), `data\generated` (the game's code as C, ~0.9 GB) | ~2 min | the lifter changed |
+| `lift` | `data\exefs` (a copy of the code modules), `data\generated` (the game's code as LLVM IR `.ll` / `.bc` modules) | ~2 min | the lifter changed |
 | `compile` | `UltraTears.exe` (~0.4 GB) and `build\` (objects ~1.8 GB, debug symbols) | ~15 min (seconds when little changed) | sources changed (ninja) |
 | `shaders` | `data\shaders` (SPIR-V of the 28,769 shaders) | ~5 min | the finder or the translator changed; new shaders only otherwise |
 | `textures` | `data\textures` (BC7 / BC1 of every ASTC texture, ~7.4 GB) | ~7 min | textures not yet in the cache |

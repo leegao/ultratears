@@ -1,6 +1,9 @@
 // Linux host layer (runtime/platform.h). x86-64 and aarch64.
 #define _GNU_SOURCE
+#if __has_include(<SDL3/SDL.h>)
 #include <SDL3/SDL.h>
+#define ULTRS_HAVE_SDL3 1
+#endif
 #include <dlfcn.h>
 #include <errno.h>
 #include <execinfo.h>
@@ -31,17 +34,29 @@ bool plat_reserve_guest(uint64_t lo, uint64_t hi) {
     void *p = mmap((void *)(uintptr_t)lo, hi - lo, PROT_READ | PROT_WRITE,
                    MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED_NOREPLACE, -1, 0);
     if (p == MAP_FAILED) return false;
-    if (p != (void *)(uintptr_t)lo) { munmap(p, hi - lo); return false; }  // (kernels before 4.17: just a hint)
+    if (p != (void *)(uintptr_t)lo) { munmap(p, hi - lo); return false; }
+#ifdef MADV_HUGEPAGE
+    madvise(p, hi - lo, MADV_HUGEPAGE);
+#endif
     return true;
 }
 
-// Fresh zero pages over the whole window (the old ones are released at once).
 bool plat_reset_guest(uint64_t lo, uint64_t hi) {
-    return mmap((void *)(uintptr_t)lo, hi - lo, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED,
-                -1, 0) == (void *)(uintptr_t)lo;
+    void *p = mmap((void *)(uintptr_t)lo, hi - lo, PROT_READ | PROT_WRITE,
+                   MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE | MAP_FIXED, -1, 0);
+#ifdef MADV_HUGEPAGE
+    if (p == (void *)(uintptr_t)lo) madvise(p, hi - lo, MADV_HUGEPAGE);
+#endif
+    return p == (void *)(uintptr_t)lo;
 }
 
-void plat_commit(uint64_t addr, uint64_t size) { (void)addr; (void)size; }
+void plat_commit(uint64_t addr, uint64_t size) {
+#ifdef MADV_HUGEPAGE
+    if (size >= (2ULL << 20)) madvise((void *)(uintptr_t)addr, size, MADV_HUGEPAGE);
+#else
+    (void)addr; (void)size;
+#endif
+}
 
 int plat_written_pages(uint64_t addr, uint64_t size, uint64_t *pages, int max, uint64_t *page) {  // (no write tracking)
     (void)addr; (void)size; (void)pages; (void)max; (void)page;
@@ -67,7 +82,9 @@ void plat_sleep_until_ns(uint64_t t) {
 
 // Real-time scheduling where the user may have it (rtkit / limits.conf), else just a higher priority: keeps the
 // vsync thread on time while the guest threads load every core.
-void plat_thread_boost(void) {}   // [temporary] Linux / Steam Deck: nice / SCHED_* for the replay thread - with the Deck port
+void plat_thread_boost(void) {
+    setpriority(PRIO_PROCESS, (id_t)gettid(), -5);
+}
 
 void plat_thread_realtime(uint64_t period_ns) {
     (void)period_ns;
@@ -77,37 +94,35 @@ void plat_thread_realtime(uint64_t period_ns) {
 }
 
 // ---- process
-// Started from a desktop (the AppImage) there is no terminal: stdout / stderr go to lasrecomp.log in the data folder
-// (runtime/paths.h; rt_paths_init runs later, so the same rule is applied here). Processes started by this one (the
-// start screen re-executing itself for the game) append to the same log.
+// Started from a desktop (the AppImage) there is no terminal: stdout / stderr go to ultratears.log in the data folder.
 static char g_log_path[1024];
 
 static void log_to_file_without_terminal(void) {
     if (isatty(STDERR_FILENO)) return;
     char dir[900];
-    const char *env = getenv("LARECOMP_DATA_ROOT"), *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
+    const char *env = getenv("ULTRATEARS_DATA_ROOT"), *xdg = getenv("XDG_DATA_HOME"), *home = getenv("HOME");
     struct stat st;
     if (env && *env) snprintf(dir, sizeof dir, "%s", env);
-    else if (stat("extracted", &st) == 0 && S_ISDIR(st.st_mode)) return;  // dev mode: wherever stderr goes already
-    else if (xdg && *xdg == '/') snprintf(dir, sizeof dir, "%s/lasrecomp", xdg);
-    else snprintf(dir, sizeof dir, "%s/.local/share/lasrecomp", home && *home ? home : "/tmp");
+    else if (stat("data", &st) == 0 && S_ISDIR(st.st_mode)) return;  // dev mode: wherever stderr goes already
+    else if (xdg && *xdg == '/') snprintf(dir, sizeof dir, "%s/ultratears", xdg);
+    else snprintf(dir, sizeof dir, "%s/.local/share/ultratears", home && *home ? home : "/tmp");
     for (char *c = dir + 1; *c; c++)
         if (*c == '/') { *c = 0; mkdir(dir, 0755); *c = '/'; }
     mkdir(dir, 0755);
-    snprintf(g_log_path, sizeof g_log_path, "%s/lasrecomp.log", dir);
-    bool append = getenv("LASRECOMP_LOG_APPEND") != NULL;
+    snprintf(g_log_path, sizeof g_log_path, "%s/ultratears.log", dir);
+    bool append = getenv("ULTRATEARS_LOG_APPEND") != NULL;
     if (!freopen(g_log_path, append ? "a" : "w", stderr)) { g_log_path[0] = 0; return; }
     dup2(STDERR_FILENO, STDOUT_FILENO);
-    setenv("LASRECOMP_LOG_APPEND", "1", 1);
+    setenv("ULTRATEARS_LOG_APPEND", "1", 1);
 }
 
 #if defined(__x86_64__)
-// The recompiled game code is built for x86-64-v3 (Makefile GENARCH: AVX2, FMA, BMI2): say so instead of crashing
+// The recompiled game code is built for x86-64-v3 (AVX2, FMA, BMI2): say so instead of crashing
 // with an illegal instruction on an older CPU.
 static void require_cpu(void) {
     __builtin_cpu_init();
     if (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma") && __builtin_cpu_supports("bmi2")) return;
-    fprintf(stderr, "FATAL: LAS Recomp needs a CPU with AVX2 (Intel Haswell / 2013 or newer, AMD Excavator / Zen or "
+    fprintf(stderr, "FATAL: UltraTears needs a CPU with AVX2 (Intel Haswell / 2013 or newer, AMD Excavator / Zen or "
                     "newer).\n");
     exit(1);
 }
@@ -152,9 +167,8 @@ void plat_exec(char *const argv[]) {
 }
 
 // ---- diagnostics
-// Exported symbols only (the Makefile links with -rdynamic); frames in the generated code are left to the caller,
-// which maps them to guest functions (runtime/dispatch.c). Static runtime functions come out as the nearest guest
-// function, so backtrace lines also give the offset in the executable (addr2line -fe lasrecomp <offset>).
+// Exported symbols only (linked with -rdynamic); frames in the generated code are left to the caller,
+// which maps them to guest functions (runtime/dispatch.c).
 const char *plat_symbol(uint64_t pc, uint64_t *offset) {
     Dl_info di = {0};
     if (!dladdr((void *)(uintptr_t)pc, &di) || !di.dli_sname) return NULL;
@@ -166,9 +180,11 @@ const char *plat_symbol(uint64_t pc, uint64_t *offset) {
 void plat_fatal_notice(void) {
     if (!g_log_path[0]) return;
     fflush(stderr);
+#ifdef ULTRS_HAVE_SDL3
     char text[1200];
-    snprintf(text, sizeof text, "LAS Recomp stopped because of an error.\n\nDetails: %s", g_log_path);
-    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "LAS Recomp", text, NULL);
+    snprintf(text, sizeof text, "UltraTears stopped because of an error.\n\nDetails: %s", g_log_path);
+    SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "UltraTears", text, NULL);
+#endif
 }
 
 const char *rt_host_fn_name(uint64_t pc, uint64_t *offset);  // runtime/dispatch.c
@@ -187,7 +203,7 @@ void plat_print_backtrace(void) {
         if (!s && ours) s = rt_host_fn_name(pc, &off);
         const char *mod = di.dli_fname ? (strrchr(di.dli_fname, '/') ? strrchr(di.dli_fname, '/') + 1 : di.dli_fname) : "?";
         uint64_t moff = pc - (uint64_t)(uintptr_t)di.dli_fbase;
-        if (s && ours) fprintf(stderr, "  #%-2d %016llx %s+%llx (lasrecomp+%llx)\n", i, (unsigned long long)pc, s,
+        if (s && ours) fprintf(stderr, "  #%-2d %016llx %s+%llx (ultratears+%llx)\n", i, (unsigned long long)pc, s,
                                (unsigned long long)off, (unsigned long long)moff);
         else if (s) fprintf(stderr, "  #%-2d %016llx %s+%llx (%s)\n", i, (unsigned long long)pc, s, (unsigned long long)off, mod);
         else fprintf(stderr, "  #%-2d %016llx %s+%llx\n", i, (unsigned long long)pc, mod, (unsigned long long)moff);
@@ -197,7 +213,6 @@ void plat_print_backtrace(void) {
 static void crash_handler(int sig, siginfo_t *si, void *ctx) {
     ucontext_t *uc = ctx;
     static volatile int depth;
-    if (sig == SIGABRT && depth++ > 0) { signal(SIGABRT, SIG_DFL); abort(); }  // (nested: just die)
     uint64_t fa = (uint64_t)(uintptr_t)si->si_addr;
 #if defined(__aarch64__)
     uint64_t pc = uc->uc_mcontext.pc, lr = uc->uc_mcontext.regs[30];
@@ -206,7 +221,12 @@ static void crash_handler(int sig, siginfo_t *si, void *ctx) {
     uint64_t pc = (uint64_t)uc->uc_mcontext.gregs[REG_RIP], sp = (uint64_t)uc->uc_mcontext.gregs[REG_RSP], lr = 0;
     if (sig != SIGSEGV || (fa & ~0xFFFull) != (sp & ~0xFFFull)) lr = *(uint64_t *)(uintptr_t)sp;
 #endif
-    if (rt_fault_watch(fa, pc)) return;
+    if (sig == SIGSEGV && rt_fault_watch(fa, pc)) return;
+    if (depth++ > 0) {
+        signal(sig, SIG_DFL);
+        signal(SIGABRT, SIG_DFL);
+        abort();
+    }
     char what[32];
     snprintf(what, sizeof what, "signal %d", sig);
     rt_fault_report(what, fa, pc, lr);
@@ -270,3 +290,4 @@ bool plat_remove_tree(const char *dir) { return nftw(dir, rm_entry, 16, FTW_DEPT
 // End the process at once, skipping the library teardown: as on Windows, the GPU driver's threads crashed in exit()
 // while the game's threads still submitted work.
 void plat_terminate(void) { _exit(0); }
+

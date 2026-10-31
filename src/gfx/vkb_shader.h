@@ -50,3 +50,6 @@ VkShaderEXT vkb_shader_variant(const vkb_shader *vs, uint32_t intmask, uint32_t 
 VkDescriptorSetLayout vkb_set_layout(int compute);
 VkPipelineLayout vkb_pipeline_layout(int compute);
 void vkb_shader_stats(uint64_t *loaded, uint64_t *missing);
+void vkb_shader_set_dir(const char *dir);
+void vkb_shader_dump_all(const char *dst_dir);
+

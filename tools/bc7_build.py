@@ -3,13 +3,8 @@ BNTX (.bntx / .bntx.zs: the interface, some effects) files, encoded once.
 
 usage: python tools/bc7_build.py [--romfs data/romfs] [--cache data/textures] [--threads 8] [--quality 2]
                                  [--limit N] [--max-block-area 144]
---max-block-area: ASTC blocks larger than this many texels are left out (decoded when met instead). Blocks larger than
-100 texels (the interface's 12x12 maps, 3000x3000) become BC1 when opaque, else BC7 (the user's choice, 2026-10-25).
-Runs on --threads logical CPUs at below-normal priority (the rest of the PC stays free), as tools/build_game.py does.
-The cache is the player's own derived data: never in git or a build (README.md, Legal).
 """
 import argparse
-import json
 import os
 import pathlib
 import subprocess
@@ -18,8 +13,8 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'tools'))
-from toolchain import CLANG64, env as tool_env  # noqa: E402
-from build_game import run_limited  # noqa: E402
+from toolchain import IS_LINUX, EXE_EXT, find_cc, env as tool_env  # noqa: E402
+from build_game import run_limited, _linux_lib  # noqa: E402
 from romfs import RomFS  # noqa: E402
 
 SOURCES_C = ['tools/bc7build/bc7build.c', 'src/gfx/tex/astc.c', 'src/gfx/tex/bc7key.c']
@@ -27,21 +22,30 @@ SOURCES_CXX = ['src/gfx/tex/bc7.cpp', 'src/gfx/tex/bc7enc/bc7enc.cpp', 'src/gfx/
 
 
 def build_tool(env):
-    exe = ROOT / 'build/bc7build.exe'
+    exe = ROOT / f'build/bc7build{EXE_EXT}'
     newest = max((ROOT / s).stat().st_mtime for s in SOURCES_C + SOURCES_CXX)
     if exe.exists() and exe.stat().st_mtime > newest:
         return exe
+    cc, cxx, _ = find_cc()
     objs = []
     (ROOT / 'build/obj').mkdir(parents=True, exist_ok=True)
     for s in SOURCES_C + SOURCES_CXX:
-        cxx = s.endswith('.cpp')
+        is_cxx = s.endswith('.cpp')
         obj = ROOT / 'build/obj' / ('bc7build_' + s.replace('/', '_').rsplit('.', 1)[0] + '.o')
-        cmd = [str(CLANG64 / ('clang++.exe' if cxx else 'clang.exe')), '-O2', '-march=x86-64-v3', '-w', '-c', str(ROOT / s), '-o', str(obj)]
-        if cxx:
+        cmd = [cxx if is_cxx else cc, '-O2', '-march=x86-64-v3', '-w']
+        if IS_LINUX:
+            cmd += ['-Ithird_party/linux_headers']
+        cmd += ['-c', str(ROOT / s), '-o', str(obj)]
+        if is_cxx:
             cmd += ['-std=c++17', '-fno-exceptions', '-fno-rtti']
         subprocess.run(cmd, check=True, env=env)
         objs.append(str(obj))
-    subprocess.run([str(CLANG64 / 'clang.exe'), '-fuse-ld=lld', '-o', str(exe)] + objs + ['-static', '-pthread', '-lzstd', '-lc++'], check=True, env=env)
+    if not IS_LINUX:
+        link_cmd = [cc, '-fuse-ld=lld', '-o', str(exe)] + objs + ['-static', '-pthread', '-lzstd', '-lc++']
+    else:
+        zstd_lib = _linux_lib('-lzstd', ('libzstd.so.1',))
+        link_cmd = [cc, '-o', str(exe)] + objs + ['-pthread', zstd_lib, '-lstdc++', '-lm']
+    subprocess.run(link_cmd, check=True, env=env)
     return exe
 
 
@@ -54,10 +58,10 @@ def main():
     ap.add_argument('--limit', type=int, default=0)
     ap.add_argument('--max-block-area', type=int, default=144)
     a = ap.parse_args()
-    rom = RomFS(ROOT / a.romfs)   # a folder of plain files or the development romfs.bin
+    rom = RomFS(ROOT / a.romfs)
     files = [dict(path=p, size=n, offset=rom.offset(p)) for p, n in rom.files.items()
              if (p.startswith('TexToGo/') and p.endswith('.txtg')) or p.endswith('.bntx.zs') or p.endswith('.bntx')]
-    files.sort(key=lambda f: -f['size'])   # large ones first: the threads finish together
+    files.sort(key=lambda f: -f['size'])
     if a.limit:
         files = files[:a.limit]
     cache = ROOT / a.cache

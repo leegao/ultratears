@@ -1,3 +1,8 @@
-// Stand-in for the macOS header <sys/mman.h> (MacNativeGames code on Windows): definitions live in gfx_compat.h.
+// Stand-in for <sys/mman.h> on Windows; forwards to system <sys/mman.h> on Linux.
 #pragma once
+#ifdef _WIN32
 #include "gfx_compat.h"
+#else
+#include_next <sys/mman.h>
+#include "gfx_compat.h"
+#endif

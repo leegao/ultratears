@@ -11,6 +11,10 @@
 #include "host.h"
 #include "../runtime/hle.h"
 
+#ifndef LOCALE_NAME_MAX_LENGTH
+#define LOCALE_NAME_MAX_LENGTH 85
+#endif
+
 /* TOTK_OPERATION_MODE=handheld reports the Switch handheld mode (oe OperationMode 0, PerformanceMode Normal 0) instead
    of docked (1, Boost 1): the game then uses its own handheld settings (1280x720 output, lower internal resolution). */
 static int handheld_mode(void) {
@@ -27,7 +31,7 @@ static int handheld_mode(void) {
 int runtime_handheld_mode(void) { return handheld_mode(); }
 
 /* The game's language: TOTK_LANG as given (a Switch language code), otherwise from TOTK_LOCALE or the user's
-   Windows UI language. Brazil maps to "pt-BR" in 1.4.3, whose RomFS has the official Brazilian text. */
+   host locale. Brazil maps to "pt-BR" in 1.4.3, whose RomFS has the official Brazilian text. */
 static uint64_t desired_language(void) {
     const char *explicit_code = getenv("TOTK_LANG");
     char code[8] = {0};
@@ -42,6 +46,16 @@ static uint64_t desired_language(void) {
         else {
             wchar_t w[LOCALE_NAME_MAX_LENGTH];
             if (GetUserDefaultLocaleName(w, LOCALE_NAME_MAX_LENGTH)) WideCharToMultiByte(CP_UTF8, 0, w, -1, tag, sizeof tag, NULL, NULL);
+        }
+#else
+        else {
+            const char *lc = getenv("LC_ALL");
+            if (!lc || !*lc) lc = getenv("LANG");
+            if (lc && *lc) {
+                snprintf(tag, sizeof tag, "%s", lc);
+                char *dot = strchr(tag, '.');
+                if (dot) *dot = 0;
+            }
         }
 #endif
         char language[16] = {0}, region[4] = {0};
@@ -95,7 +109,11 @@ HLE_FUNC("_ZN2nn2oe28SetResumeNotificationEnabledEb", oe_resume_enabled) { resum
 HLE_FUNC("_ZN2nn2oe42SetOperationModeChangedNotificationEnabledEb", oe_operation_enabled) { operation_notification = c->x[0] & 255; }
 HLE_FUNC("_ZN2nn2oe44SetPerformanceModeChangedNotificationEnabledEb", oe_performance_enabled) { performance_notification = c->x[0] & 255; }
 HLE_FUNC("nndiagStartup", host_diag_init) { (void)c; fprintf(stderr, "[totk] native diagnostics initialized\n"); }
+#ifdef _WIN32
 HLE_FUNC("_ZN2nn2oe10InitializeEv", host_oe_init) { (void)c; fprintf(stderr, "[totk] application environment: local Windows process\n"); }
+#else
+HLE_FUNC("_ZN2nn2oe10InitializeEv", host_oe_init) { (void)c; fprintf(stderr, "[totk] application environment: local Linux process\n"); }
+#endif
 HLE_FUNC("_ZN2nn3aoc10InitializeEv", host_aoc_init) { (void)c; fprintf(stderr, "[totk] add-on content: no DLC\n"); }
 HLE_FUNC("_ZN2nn3aoc17CountAddOnContentEv", host_aoc_count) { c->x[0] = 0; }
 HLE_FUNC("_ZN2nn3aoc16ListAddOnContentEPiii", host_aoc_list) {

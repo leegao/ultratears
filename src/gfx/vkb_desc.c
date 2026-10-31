@@ -7,6 +7,7 @@
 // Within a submission no object a descriptor names is destroyed or recreated (destruction waits for the GPU, pools are
 // deleted between submissions), so the per-submission caches cannot see a reused handle.
 // TOTK_VK_DESCRIPTOR_SETS=1 keeps descriptor sets (A/B; also where the extension is missing).
+#include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -18,14 +19,28 @@
 
 #define VLOG(...) LOG("[vk] " __VA_ARGS__)
 
-int vkb_db_on(void) {
-    static int v = -1;
-    if (v < 0) {
-        const char *e = getenv("TOTK_VK_DESCRIPTOR_SETS");
-        v = vkc.has_descriptor_buffer && !(e && *e && *e != '0');
-        VLOG("descriptors: %s", v ? "descriptor buffers" : "descriptor sets");
+static int desc_debug_env(void) {
+    static _Atomic int v = -1;
+    int val = atomic_load(&v);
+    if (val < 0) {
+        const char *e = getenv("TOTK_VK_DESC_DEBUG");
+        if (!e) e = getenv("TOTK_VK_DEBUG");
+        val = e && *e && *e != '0';
+        atomic_store(&v, val);
     }
-    return v;
+    return val;
+}
+
+int vkb_db_on(void) {
+    static _Atomic int v = -1;
+    int val = atomic_load(&v);
+    if (val < 0) {
+        const char *e = getenv("TOTK_VK_DESCRIPTOR_SETS");
+        val = vkc.has_descriptor_buffer && !(e && *e && *e != '0');
+        atomic_store(&v, val);
+        VLOG("descriptors: %s", val ? "descriptor buffers" : "descriptor sets");
+    }
+    return val;
 }
 
 // ---- the layouts: size and the offset of every binding
@@ -35,7 +50,12 @@ void vkb_db_layouts(const VkDescriptorSetLayout layout[2]) {
         vk.vkGetDescriptorSetLayoutSizeEXT(vkc.device, layout[c], &g_size[c]);
         for (uint32_t b = 0; b < 128; b++) {
             int used = b % VKB_STAGE_BINDINGS < VKB_B_IMG + VKB_NIMG && (!c || b < VKB_STAGE_BINDINGS);   // compute: one stage
-            if (used) vk.vkGetDescriptorSetLayoutBindingOffsetEXT(vkc.device, layout[c], b, &g_off[c][b]);
+            if (used) {
+                vk.vkGetDescriptorSetLayoutBindingOffsetEXT(vkc.device, layout[c], b, &g_off[c][b]);
+                if (desc_debug_env() && (b < 4 || b == 34 || b == 58)) {
+                    VLOG("layout %s binding %u: offset %llu", c ? "compute" : "graphics", b, (unsigned long long)g_off[c][b]);
+                }
+            }
         }
     }
     VLOG("descriptor buffer: set sizes %llu (graphics) / %llu (compute) bytes", (unsigned long long)g_size[0], (unsigned long long)g_size[1]);
@@ -96,8 +116,8 @@ void vkb_db_slot_reset(int slot) {   // the slot's previous submission is comple
 uint64_t vkb_db_gen(void) { return g_gen; }
 
 // ---- the bytes of one descriptor, per submission (tables per recording thread)
-enum { CACHE = 1 << 15 };
-typedef struct { uint64_t rec, k0, k1, k2, k3; uint8_t len, bytes[63]; } dcache_t;
+enum { CACHE = 1 << 15, MAX_DESC_BYTES = 256 };
+typedef struct { uint64_t rec, k0, k1, k2, k3; uint16_t len; uint8_t bytes[MAX_DESC_BYTES]; } dcache_t;
 static __thread dcache_t *g_cache;
 static vkb_cnt g_get_calls, g_cache_hits;
 typedef struct { uint64_t rec; VkBuffer buf; VkDeviceAddress addr; } addr_t;
@@ -106,7 +126,7 @@ static __thread addr_t *g_addr;   // 4096
 static VkDeviceAddress buffer_address(VkBuffer b, uint64_t rec) {
     if (!g_addr && !(g_addr = calloc(4096, sizeof *g_addr))) die("buffer addresses");
     uint32_t h = (uint32_t)(((uint64_t)(uintptr_t)b * 0x9e3779b97f4a7c15ull) >> 52);
-    for (uint32_t k = h;; k = (k + 1) & 4095) {
+    for (uint32_t k = h, probe = 0; probe < 32; k = (k + 1) & 4095, probe++) {
         if (g_addr[k].rec == rec && g_addr[k].buf == b) return g_addr[k].addr;
         if (g_addr[k].rec != rec) {
             VkBufferDeviceAddressInfo ad = {VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = b};
@@ -114,6 +134,8 @@ static VkDeviceAddress buffer_address(VkBuffer b, uint64_t rec) {
             return g_addr[k].addr;
         }
     }
+    VkBufferDeviceAddressInfo ad = {VK_STRUCTURE_TYPE_BUFFER_DEVICE_ADDRESS_INFO, .buffer = b};
+    return vk.vkGetBufferDeviceAddress(vkc.device, &ad);
 }
 static size_t type_size(VkDescriptorType t) {
     switch (t) {
@@ -121,6 +143,8 @@ static size_t type_size(VkDescriptorType t) {
     case VK_DESCRIPTOR_TYPE_STORAGE_BUFFER: return vkc.db.storageBufferDescriptorSize;
     case VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER: return vkc.db.combinedImageSamplerDescriptorSize;
     case VK_DESCRIPTOR_TYPE_STORAGE_IMAGE: return vkc.db.storageImageDescriptorSize;
+    case VK_DESCRIPTOR_TYPE_SAMPLER: return vkc.db.samplerDescriptorSize;
+    case VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE: return vkc.db.sampledImageDescriptorSize;
     default: return 0;
     }
 }
@@ -137,21 +161,29 @@ static const uint8_t *descriptor(const VkWriteDescriptorSet *w, uint64_t rec, si
         if (c->rec == rec && c->k0 == k0 && c->k1 == k1 && c->k2 == k2 && c->k3 == k3) { vkb_cnt_add(g_cache_hits, 1); *len = c->len; return c->bytes; }
         if (c->rec != rec) { e = c; break; }
     }
-    static __thread uint8_t spill[64];   // the table region is full: no caching for this one
+    static __thread uint8_t spill[MAX_DESC_BYTES];   // the table region is full: no caching for this one
     uint8_t *out = e ? e->bytes : spill;
     size_t n = type_size(w->descriptorType);
-    if (n > 63) die("descriptor of %zu bytes", n);
+    if (n > MAX_DESC_BYTES) die("descriptor of %zu bytes exceeds MAX_DESC_BYTES (%d)", n, (int)MAX_DESC_BYTES);
+    if (n == 0) die("descriptor of type %d has size 0 in driver descriptor buffer properties", (int)w->descriptorType);
     VkDescriptorGetInfoEXT gi = {VK_STRUCTURE_TYPE_DESCRIPTOR_GET_INFO_EXT, .type = w->descriptorType};
     VkDescriptorAddressInfoEXT ai = {VK_STRUCTURE_TYPE_DESCRIPTOR_ADDRESS_INFO_EXT};
     if (w->pBufferInfo) {
         ai.address = buffer_address(w->pBufferInfo->buffer, rec) + w->pBufferInfo->offset;
         ai.range = w->pBufferInfo->range;
         if (w->descriptorType == VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER) gi.data.pUniformBuffer = &ai; else gi.data.pStorageBuffer = &ai;
-    } else if (w->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) gi.data.pCombinedImageSampler = w->pImageInfo;
-    else gi.data.pStorageImage = w->pImageInfo;
+    } else if (w->descriptorType == VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER) {
+        gi.data.pCombinedImageSampler = w->pImageInfo;
+    } else if (w->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLER) {
+        gi.data.pSampler = &w->pImageInfo->sampler;
+    } else if (w->descriptorType == VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE) {
+        gi.data.pSampledImage = w->pImageInfo;
+    } else {
+        gi.data.pStorageImage = w->pImageInfo;
+    }
     vk.vkGetDescriptorEXT(vkc.device, &gi, n, out);
     vkb_cnt_add(g_get_calls, 1);
-    if (e) { e->rec = rec; e->k0 = k0; e->k1 = k1; e->k2 = k2; e->k3 = k3; e->len = (uint8_t)n; }
+    if (e) { e->rec = rec; e->k0 = k0; e->k1 = k1; e->k2 = k2; e->k3 = k3; e->len = (uint16_t)n; }
     *len = n;
     return out;
 }
@@ -164,6 +196,10 @@ void vkb_db_bind(VkCommandBuffer cb, int slot, uint64_t rec) {
     VkDescriptorBufferBindingInfoEXT bb = {VK_STRUCTURE_TYPE_DESCRIPTOR_BUFFER_BINDING_INFO_EXT, .address = m->addr,
         .usage = VK_BUFFER_USAGE_RESOURCE_DESCRIPTOR_BUFFER_BIT_EXT | VK_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER_BIT_EXT};
     vk.vkCmdBindDescriptorBuffersEXT(cb, 1, &bb);
+    if (desc_debug_env()) {
+        VLOG("vkCmdBindDescriptorBuffersEXT: cb=%p, slot=%d, rec=%llu, gen=%llu, addr=%#llx",
+             (void*)cb, slot, (unsigned long long)rec, (unsigned long long)g_gen, (unsigned long long)m->addr);
+    }
     g_bound_rec = rec; g_bound_gen = g_gen;
 }
 // A draw's descriptors (the writes' dstSet is ignored) in the slot's descriptor memory: their offset there.
@@ -188,6 +224,14 @@ VkDeviceSize vkb_db_set(VkCommandBuffer cb, int slot, uint64_t rec, const VkWrit
         at = 0;
     }
     vkb_db_bind(cb, slot, rec);
+    if (desc_debug_env()) {
+        static _Atomic uint64_t set_count;
+        uint64_t sc = atomic_fetch_add(&set_count, 1);
+        if (sc < 10 || (sc % 1000) == 0) {
+            VLOG("vkb_db_set #%llu: slot %d, thread %d, %s, writes=%d, offset=%llu",
+                 (unsigned long long)sc, slot, wk, compute ? "compute" : "graphics", n, (unsigned long long)at);
+        }
+    }
     uint64_t sub = mtl_last_fence() + 1;   // the bytes stay valid for the submission (rec: this command buffer)
     uint8_t *base = m->map + at;
     for (int i = 0; i < n; i++) {

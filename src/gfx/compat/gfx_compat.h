@@ -1,12 +1,15 @@
-// Windows stand-ins for the macOS APIs MacNativeGames' graphics front end (d2r_gfx/gfx/nvn) uses.
+// Stand-ins for the macOS APIs MacNativeGames' graphics front end (d2r_gfx/gfx/nvn) uses on Windows and Linux.
 // - Mach time: mach_absolute_time() is the runtime's monotonic nanoseconds (timebase 1/1), mach_wait_until() sleeps
 //   precisely until such a time.
 // - Mach thread/task statistics and real-time thread policies: unavailable (KERN_FAILURE); MacNativeGames only logs
 //   them, and every caller checks the result.
-// - QoS classes: no-ops (Windows thread priorities are set where the port needs them).
+// - QoS classes: no-ops (host thread priorities are set where the port needs them).
 // - sigsetjmp guards: plain setjmp (guest pages are committed on first touch, so guarded guest reads do not fault).
-// - malloc_size: _msize.
+// - malloc_size: _msize on Windows, malloc_usable_size on Linux.
 #pragma once
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <setjmp.h>
 #include <signal.h>
 #include <stdint.h>
@@ -18,9 +21,28 @@
 #include <time.h>
 #include <malloc.h>
 #include <unistd.h>
+#include <sys/stat.h>
 
+#ifdef __cplusplus
+#ifndef _Static_assert
+#define _Static_assert static_assert
+#endif
+#endif
+
+#ifndef _WIN32
+#include <sys/mman.h>
+#include <sys/resource.h>
+#include <sys/ucontext.h>
+#endif
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 uint64_t plat_now_ns(void);
 void plat_sleep_until_ns(uint64_t t);
+#ifdef __cplusplus
+}
+#endif
 
 // ---- Mach time
 typedef struct { uint32_t numer, denom; } mach_timebase_info_data_t;
@@ -74,6 +96,7 @@ static inline int pthread_attr_set_qos_class_np(pthread_attr_t *a, qos_class_t q
 static inline int pthread_set_qos_class_self_np(qos_class_t q, int r) { (void)q; (void)r; return 0; }
 static inline int pthread_get_qos_class_np(pthread_t t, qos_class_t *q, int *r) { (void)t; *q = QOS_CLASS_UNSPECIFIED; *r = 0; return 0; }
 
+#ifdef _WIN32
 // ---- signals and guarded reads
 #ifndef SIGBUS
 #define SIGBUS 10
@@ -100,13 +123,34 @@ static inline int munmap(void *a, size_t n) { (void)a; (void)n; return -1; }
 static inline int mprotect(void *a, size_t n, int p) { (void)a; (void)n; (void)p; return -1; }
 static inline int getpagesize(void) { return 4096; }
 
+unsigned long __stdcall GetCurrentThreadId(void);
+static inline int pthread_threadid_np(void *t, uint64_t *id) { (void)t; *id = GetCurrentThreadId(); return 0; }
+#else
+#define malloc_size(p) malloc_usable_size(p)
+static inline int pthread_threadid_np(void *t, uint64_t *id) { (void)t; *id = (uint64_t)gettid(); return 0; }
+
+#ifndef ULTRATEARS_SYSTEM_INFO_DEFINED
+#define ULTRATEARS_SYSTEM_INFO_DEFINED
+#include <unistd.h>
+typedef struct {
+    uint32_t dwNumberOfProcessors;
+} SYSTEM_INFO;
+
+static inline void GetSystemInfo(SYSTEM_INFO *si) {
+    long n = sysconf(_SC_NPROCESSORS_ONLN);
+    si->dwNumberOfProcessors = (n > 0) ? (uint32_t)n : 4;
+}
+#endif
+
+#ifndef weak_import
+#define weak_import weak
+#endif
+#endif
+
 // ---- threads: macOS names only the calling thread
 static inline int gfx_setname(const char *n) { return pthread_setname_np(pthread_self(), n); }
 #define pthread_setname_np(n) gfx_setname(n)
 
-// ---- more Darwin calls: the thread id and per-clock nanoseconds
-unsigned long __stdcall GetCurrentThreadId(void);
-static inline int pthread_threadid_np(void *t, uint64_t *id) { (void)t; *id = GetCurrentThreadId(); return 0; }
 static inline uint64_t clock_gettime_nsec_np(clockid_t clk) {
     struct timespec ts;
     if (clock_gettime(clk, &ts)) return 0;

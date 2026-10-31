@@ -15,10 +15,13 @@ import time
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / 'tools'))
-from toolchain import XLATE  # noqa: E402
+from toolchain import XLATE, IS_LINUX, EXE_EXT  # noqa: E402
 
 
 def start_pinned(cmd, mask, env):
+    if IS_LINUX:
+        return subprocess.Popen(cmd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, text=True)
     CREATE_SUSPENDED, BELOW_NORMAL = 0x4, 0x4000
     p = subprocess.Popen(cmd, env=env, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
                          text=True, creationflags=CREATE_SUSPENDED | BELOW_NORMAL)
@@ -35,14 +38,14 @@ def main():
     ap.add_argument('--quiet', action='store_true')
     a = ap.parse_args()
     lines = (a.dir / 'jobs.jsonl').read_text().splitlines()
-    if a.new_only:   # only shaders without a translation yet (the comparison's outputs stay)
+    if a.new_only:
         lines = [l for l in lines if not (a.dir / 'ryujinx' / (json.loads(l)['job']['key'] + '.spv')).exists()]
     (a.dir / 'ryujinx').mkdir(exist_ok=True)
     env = dict(os.environ, DOTNET_CLI_TELEMETRY_OPTOUT='1', DOTNET_NOLOGO='1',
                DOTNET_CLI_HOME=str(ROOT / 'third_party/dotnet-home'))
     if XLATE is None:
-        sys.exit('the shader translator ultrs-shaders.exe is missing: python tools/build_xlate.py')
-    cmd = [str(XLATE)]   # tools/build_xlate.py, or the builder package's deps/shaders
+        sys.exit(f'the shader translator ultrs-shaders{EXE_EXT} is missing: python tools/build_xlate.py')
+    cmd = [str(XLATE)]
     results, lock = [], threading.Lock()
     shards = [lines[i::a.workers] for i in range(a.workers)]
     t0 = time.time()
@@ -68,7 +71,7 @@ def main():
     threads = [threading.Thread(target=worker, args=(s,)) for s in shards]
     for t in threads: t.start()
     for t in threads: t.join()
-    with (a.dir / ('ryujinx-results-new.tsv' if a.new_only else 'ryujinx-results.tsv')).open('w') as f:   # --new-only keeps the full table
+    with (a.dir / ('ryujinx-results-new.tsv' if a.new_only else 'ryujinx-results.tsv')).open('w') as f:
         f.write('key\tresult\tseconds\tspv_bytes\tmessage\n')
         for r in sorted(results):
             f.write(f'{r[0]}\t{r[1]}\t{r[2]:.4f}\t{r[3]}\t{r[4]}\n')

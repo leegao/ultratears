@@ -1,5 +1,12 @@
 // Guest CPU state and helpers used by recompiled code.
 #pragma once
+#ifndef TAIL
+#if defined(__clang__) || (defined(__has_attribute) && __has_attribute(musttail))
+#define TAIL __attribute__((musttail))
+#else
+#define TAIL
+#endif
+#endif
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
@@ -161,6 +168,25 @@ static inline uint32_t logic32(Cpu *c, uint32_t r) { c->nzcv = MKFLAGS(r >> 31, 
 ADC_IMPL(64, )
 ADC_IMPL(32, )
 
+#if !defined(__clang__)
+static inline uint8_t __ultratears_bitrev8(uint8_t x) {
+    x = ((x & 0xF0u) >> 4) | ((x & 0x0Fu) << 4);
+    x = ((x & 0xCCu) >> 2) | ((x & 0x33u) << 2);
+    x = ((x & 0xAAu) >> 1) | ((x & 0x55u) << 1);
+    return x;
+}
+static inline uint32_t __builtin_bitreverse32(uint32_t x) {
+    return ((uint32_t)__ultratears_bitrev8(x & 0xFF) << 24) |
+           ((uint32_t)__ultratears_bitrev8((x >> 8) & 0xFF) << 16) |
+           ((uint32_t)__ultratears_bitrev8((x >> 16) & 0xFF) << 8) |
+           (uint32_t)__ultratears_bitrev8((x >> 24) & 0xFF);
+}
+static inline uint64_t __builtin_bitreverse64(uint64_t x) {
+    return ((uint64_t)__builtin_bitreverse32((uint32_t)x) << 32) |
+           (uint64_t)__builtin_bitreverse32((uint32_t)(x >> 32));
+}
+#define __builtin_bitreverse8 __ultratears_bitrev8
+#endif
 // ---- bit ops
 #define ROR64(v, r) ((uint64_t)(v) >> ((r) & 63) | (uint64_t)(v) << ((64 - ((r) & 63)) & 63))
 #define ROR32(v, r) ((uint32_t)(v) >> ((r) & 31) | (uint32_t)(v) << ((32 - ((r) & 31)) & 31))

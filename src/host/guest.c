@@ -67,11 +67,13 @@ uint64_t runtime_now_ns(void) { return plat_now_ns(); }
 void *runtime_symbol(const char *name) { return (void *)(uintptr_t)loader_find_symbol(name); }
 
 // Guest call chain from a frame pointer (x29) and link register (x30): AArch64 frame records are {fp, lr} pairs.
+// Resolves each return address to its recompiled guest function `f_<entry>+0x<off> [module+0x<mod_off>]`,
+// attaching an ELF dynamic symbol name only when the address actually lies within that symbol's size.
 void runtime_trace_guest(uint64_t fp, uint64_t lr) {
     for (int depth = 0; depth < 32; depth++) {
-        uint64_t off = 0;
-        const char *s = lr ? loader_symbol_at(lr - 4, &off) : NULL;
-        fprintf(stderr, "    #%-2d %#llx %s+%#llx\n", depth, (unsigned long long)lr, s ? s : "?", (unsigned long long)(off + 4));
+        char desc[192];
+        rt_format_guest_addr(lr, desc, sizeof desc);
+        fprintf(stderr, "    #%-2d %#llx %s\n", depth, (unsigned long long)lr, desc);
         if (!fp || fp < GUEST_LO || fp >= GUEST_HI || (fp & 7)) break;
         uint64_t next = ((uint64_t *)(uintptr_t)fp)[0];
         lr = ((uint64_t *)(uintptr_t)fp)[1];
@@ -84,8 +86,11 @@ void runtime_trace_guest(uint64_t fp, uint64_t lr) {
 static void guest_fault_report(void) {
     Cpu *c = t_cpu;
     if (!c) { fprintf(stderr, "    (no guest thread)\n"); return; }
+    char lr_desc[192];
     fprintf(stderr, "    guest sp=%#llx tpidrro=%#llx thread handle %#x\n", (unsigned long long)c->sp,
             (unsigned long long)c->tpidrro, runtime_thread_current_handle());
+    fprintf(stderr, "    last synced guest lr (x30)=%#llx (%s)\n",
+            (unsigned long long)c->x[30], rt_format_guest_addr(c->x[30], lr_desc, sizeof lr_desc));
     for (int i = 0; i < 31; i += 4)
         fprintf(stderr, "    x%-2d %016llx  x%-2d %016llx  x%-2d %016llx  x%-2d %016llx\n", i, (unsigned long long)c->x[i],
                 i + 1, (unsigned long long)c->x[i + 1], i + 2, (unsigned long long)c->x[i + 2], i + 3,

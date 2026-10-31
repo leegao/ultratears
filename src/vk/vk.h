@@ -7,6 +7,28 @@
 #define VK_NO_PROTOTYPES
 #include <stdint.h>
 #include <vulkan/vulkan.h>
+// Fallback definitions for newer Vulkan extensions not present in third_party/linux_headers
+#ifndef VK_KHR_SURFACE_EXTENSION_NAME
+#define VK_KHR_SURFACE_EXTENSION_NAME "VK_KHR_surface"
+#endif
+#ifndef VK_KHR_XLIB_SURFACE_EXTENSION_NAME
+#define VK_KHR_XLIB_SURFACE_EXTENSION_NAME "VK_KHR_xlib_surface"
+#endif
+#ifndef VK_KHR_XCB_SURFACE_EXTENSION_NAME
+#define VK_KHR_XCB_SURFACE_EXTENSION_NAME "VK_KHR_xcb_surface"
+#endif
+#ifndef VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME
+#define VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME "VK_KHR_wayland_surface"
+#endif
+#ifndef VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME
+#define VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME "VK_KHR_dynamic_rendering"
+#endif
+#ifndef VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME
+#define VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME "VK_KHR_synchronization2"
+#endif
+#ifndef VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME
+#define VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME "VK_KHR_timeline_semaphore"
+#endif
 
 #define VK_FN_GLOBAL(X) X(vkCreateInstance) X(vkEnumerateInstanceLayerProperties) X(vkEnumerateInstanceExtensionProperties)
 #define VK_FN_INSTANCE(X) X(vkDestroyInstance) X(vkEnumeratePhysicalDevices) X(vkGetPhysicalDeviceProperties) \
@@ -43,7 +65,9 @@
     X(vkCreateQueryPool) X(vkResetQueryPool) X(vkCmdResetQueryPool) X(vkCmdWriteTimestamp2) X(vkGetQueryPoolResults) \
     X(vkCmdSetAttachmentFeedbackLoopEnableEXT) X(vkCmdSetCheckpointNV) X(vkGetQueueCheckpointDataNV) \
     X(vkGetDescriptorSetLayoutSizeEXT) X(vkGetDescriptorSetLayoutBindingOffsetEXT) X(vkGetDescriptorEXT) \
-    X(vkCmdBindDescriptorBuffersEXT) X(vkCmdSetDescriptorBufferOffsetsEXT)
+    X(vkCmdBindDescriptorBuffersEXT) X(vkCmdSetDescriptorBufferOffsetsEXT) \
+    X(vkCreateShaderModule) X(vkDestroyShaderModule) X(vkCreateGraphicsPipelines) \
+    X(vkCreateComputePipelines) X(vkDestroyPipeline) X(vkCmdBindPipeline) X(vkDestroyPipelineLayout)
 #define VK_FN_DECLARE(f) PFN_##f f;
 typedef struct { VK_FN_GLOBAL(VK_FN_DECLARE) VK_FN_INSTANCE(VK_FN_DECLARE) VK_FN_DEVICE(VK_FN_DECLARE) } VkFunctions;
 #undef VK_FN_DECLARE
@@ -74,3 +98,4 @@ int vk_init(SDL_Window *window);
 void vk_queue_lock(void);       // the queue is used by the replayer's submit thread and the present thread
 void vk_queue_unlock(void);
 int vk_check(VkResult r, const char *what);   // 1 on success, logs the failure otherwise
+const char *vk_result_str(VkResult r);

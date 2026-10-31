@@ -27,5 +27,6 @@ int totk_vpool_backing(uintptr_t va, uint64_t len, uintptr_t *cpu);
 // [va, va+len) of a virtual pool copied through its page table (unmapped pages: zeros); 0 = va is not in a virtual pool.
 int totk_vpool_gather(uintptr_t va, uint64_t len, void *dst);
 uint64_t totk_vpool_generation(void);   // changes with every MapVirtual
+uint64_t totk_vpool_range_gen(uintptr_t va, uint64_t len);   // max page map generation in [va, va+len); 0 = not in a virtual pool
 // The physical memory behind a virtual-pool range written since stamp (nvn_dirty): 1 / 0; -1 = not in a virtual pool.
 int totk_vpool_dirty_since(uintptr_t va, uint64_t len, uint64_t stamp);

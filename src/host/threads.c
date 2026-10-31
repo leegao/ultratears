@@ -133,12 +133,42 @@ static int64_t block_inner(thr_t *t, int kind, int64_t ns);
 // run guest code; a core is given up only where Horizon would switch threads (waits, sleep, yield, exit, blocking
 // host services) and handed to the best waiting thread (lowest priority value, then first come). A thread that a
 // higher-priority waiter wants to preempt gives its core up at its next SVC. TOTK_FREE_CORES=1 disables this.
-#define NCORE 3
+enum { NCORE = 6 };
 static thr_t *g_core_owner[NCORE];
 static thr_t *g_core_wait;
 static int g_cores_on = -1;
-static int cores_enabled(void) { if (g_cores_on < 0) g_cores_on = getenv("TOTK_FREE_CORES") ? 0 : 1; return g_cores_on; }
-static int core_allowed(const thr_t *t, int c) { return (int)((t->mask >> c) & 1); }
+static int core_init_done;
+static int g_ncores = 4;
+
+static void core_init(void) {
+    if (core_init_done) return;
+    const char *e = getenv("TOTK_GUEST_CORES");
+    if (e && atoi(e) >= 3 && atoi(e) <= NCORE) g_ncores = atoi(e);
+    core_init_done = 1;
+}
+
+static int cores_enabled(void) {
+    if (g_cores_on < 0) {
+        g_cores_on = getenv("TOTK_FREE_CORES") ? 0 : 1;
+        core_init();
+    }
+    return g_cores_on;
+}
+
+static int core_allowed(const thr_t *t, int c) {
+    if (c < 0 || c >= g_ncores) return 0;
+    if ((t->mask >> c) & 1) return 1;
+    if ((t->mask & 7) == 7 && c < g_ncores) return 1;
+    return 0;
+}
+
+static int pick_core(int core, uint64_t mask) {
+    if (core >= 0 && core < g_ncores) return core;
+    if (core == -2) return 0;
+    for (int i = 0; i < g_ncores; i++) if (mask & (1ULL << i)) return i;
+    return 0;
+}
+
 static void core_grant(int c) {   // holding G: give free core c to the best waiter
     thr_t *b = NULL, **bp = NULL;
     for (thr_t **p = &g_core_wait; *p; p = &(*p)->cnext)
@@ -153,11 +183,11 @@ static void core_put(thr_t *t) {   // holding G
 static void core_take(thr_t *t) {   // holding G; waits until a core in t's mask is handed over
     if (!cores_enabled() || t->cur_core >= 0) return;
     if (!(t->mask & ((1u << NCORE) - 1))) die("thread %#x core mask %#llx has no application core", t->handle, (unsigned long long)t->mask);
-    int c = t->core >= 0 && t->core < NCORE && core_allowed(t, t->core) && !g_core_owner[t->core] ? t->core : -1;
-    for (int i = 0; c < 0 && i < NCORE; i++) if (core_allowed(t, i) && !g_core_owner[i]) c = i;
+    int c = t->core >= 0 && t->core < g_ncores && core_allowed(t, t->core) && !g_core_owner[t->core] ? t->core : -1;
+    for (int i = 0; c < 0 && i < g_ncores; i++) if (core_allowed(t, i) && !g_core_owner[i]) c = i;
     if (c >= 0) { t->cur_core = c; t->core_since = now_ns(); g_core_owner[c] = t; return; }
     t->cseq = ++g_wseq; t->cnext = g_core_wait; g_core_wait = t;
-    for (int i = 0; i < NCORE; i++) if (core_allowed(t, i) && g_core_owner[i] && g_core_owner[i]->prio > t->prio) g_core_owner[i]->preempt = 1;
+    for (int i = 0; i < g_ncores; i++) if (core_allowed(t, i) && g_core_owner[i] && g_core_owner[i]->prio > t->prio) g_core_owner[i]->preempt = 1;
     while (t->cur_core < 0) pthread_cond_wait(&t->cv, &G);
 }
 static thr_t *me_or_null(void) { return t_self; }

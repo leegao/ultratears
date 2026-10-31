@@ -138,14 +138,27 @@ const char *loader_symbol_at(uint64_t addr, uint64_t *offset) {
         for (uint64_t i = 1; i < m->nsyms; i++) {
             Elf64Sym *s = sym(m, i);
             uint64_t a = m->base + s->value;
-            if (s->shndx && (s->info & 0xF) == 2 && a <= addr && a > best_addr) {
+            bool in_bounds = s->size > 0 ? (addr >= a && addr < a + s->size) : (addr == a);
+            if (s->shndx && (s->info & 0xF) == 2 && in_bounds && a >= best_addr) {
                 best = symname(m, s);
                 best_addr = a;
             }
         }
     }
-    if (offset) *offset = addr - best_addr;
+    if (offset) *offset = best ? (addr - best_addr) : 0;
     return best;
+}
+
+const char *loader_module_at(uint64_t addr, uint64_t *offset) {
+    for (int mi = 0; mi < g_nmodules; mi++) {
+        Module *m = &g_modules[mi];
+        if (addr >= m->base && addr < m->base + m->size) {
+            if (offset) *offset = addr - m->base;
+            return m->name;
+        }
+    }
+    if (offset) *offset = 0;
+    return NULL;
 }
 
 static uint64_t resolve(Module *m, uint32_t symidx) {

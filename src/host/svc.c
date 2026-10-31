@@ -2,7 +2,7 @@
  * Ported from MacNativeGames games/totk/runtime/services.c (runtime_svc, memory_init, alias_map, stack_move) and
  * loader.c (module permissions / query) @b75be8c (MIT). Changes: guest regions live inside the window that
  * src/runtime reserves at startup (pages are committed when first touched); unmapping decommits pages, so a page
- * mapped again reads as zeros. Darwin's 16 KiB page handling is gone (Windows pages are 4 KiB, as on the Switch).
+ * mapped again reads as zeros. Darwin's 16 KiB page handling is gone (Windows and Linux x86-64 pages are 4 KiB, as on the Switch).
  * Unmapped guest pages are not made inaccessible yet: a stray access reads zeros instead of faulting. */
 #include <stdatomic.h>
 #include <stdio.h>
@@ -11,6 +11,8 @@
 #include <time.h>
 #ifdef _WIN32
 #include <windows.h>
+#else
+#include <sys/mman.h>
 #endif
 
 #include "host.h"
@@ -41,10 +43,12 @@ static uint8_t *user_exception_context;
 static pthread_mutex_t memory_lock = PTHREAD_MUTEX_INITIALIZER;
 
 static void decommit(uint64_t addr, uint64_t size) {
+    if (!size) return;
 #ifdef _WIN32
-    if (size && !VirtualFree((void *)(uintptr_t)addr, size, MEM_DECOMMIT)) runtime_fail("decommit guest pages");
+    if (!VirtualFree((void *)(uintptr_t)addr, size, MEM_DECOMMIT)) runtime_fail("decommit guest pages");
 #else
-    (void)addr; (void)size;
+    if (madvise((void *)(uintptr_t)addr, size, MADV_DONTNEED) != 0)
+        runtime_fail("decommit guest pages");
 #endif
 }
 
@@ -135,13 +139,21 @@ static uint64_t alias_map(int unmap, uint64_t addr, uint64_t size) {
     if (unmap) {
         for (unsigned i = 0; i < nstack_maps; i++)
             if (overlaps(addr, size, stack_maps[i].src, stack_maps[i].size)) { pthread_mutex_unlock(&memory_lock); return 0xdc01; }
-        uint64_t released = 0;
-        for (unsigned i = 0; i < count; i++)
+        uint64_t released = 0, run_addr = 0, run_size = 0;
+        for (unsigned i = 0; i < count; i++) {
             if (alias_pages[first + i]) {
                 alias_pages[first + i] = 0;
                 released += 4096;
-                decommit(addr + (uint64_t)i * 4096, 4096);   // mapped again later: zero-filled like a fresh page
+                uint64_t page_addr = addr + (uint64_t)i * 4096;
+                if (run_size && run_addr + run_size == page_addr) run_size += 4096;
+                else {
+                    if (run_size) decommit(run_addr, run_size);
+                    run_addr = page_addr;
+                    run_size = 4096;
+                }
             }
+        }
+        if (run_size) decommit(run_addr, run_size);
         alias_bytes -= released;
     } else {
         for (unsigned i = 0; i < count; i++) alias_pages[first + i] = 1;

@@ -61,5 +61,10 @@ totk_dump
 archive.zip
 fix_chmod.sh
 mkarchive.sh
+setup.sh
+sync.sh
+timing.tsv
 tools/local_llvm.py
-third_party/llvm/
+src/horizon2llvm/third-party/llvm
+src/horizon2llvm/benchmark/main_432/results/
+src/replay/tests/
