@@ -39,7 +39,7 @@ PROGRAMS = ['clang.exe', 'clang++.exe', 'ld.lld.exe', 'lld.exe', 'llvm-windres.e
 LICENSES = ['clang', 'clang-libs', 'compiler-rt', 'crt', 'headers', 'libc++', 'libunwind', 'libwinpthread', 'winpthreads',
             'lld', 'llvm', 'llvm-libs', 'llvm-tools', 'ninja', 'SDL3', 'opus', 'libvpx', 'zstd', 'libiconv', 'zlib', 'xz',
             'libffi', 'libxml2', 'vulkan-headers']
-PY_PACKAGES = ['lz4', 'capstone', 'unicorn']
+PY_PACKAGES = []
 PY_SKIP = {'test', 'idlelib', 'tkinter', 'turtledemo', 'ensurepip', 'lib2to3', '__pycache__'}
 
 SETUP_BAT = r'''@echo off
@@ -107,7 +107,7 @@ def clang64_files_used(home):
     tmp = ROOT / 'dev-local/build/package-probe'
     tmp.mkdir(parents=True, exist_ok=True)
     for src, cxx in (('tools/bc7build/bc7build.c', False), ('src/gfx/tex/astc.c', False), ('src/gfx/tex/bc7.cpp', True),
-                     ('src/gfx/tex/bc7enc/bc7enc.cpp', True), ('src/gfx/tex/bc7enc/rgbcx.cpp', True)):
+                     ('src/gfx/tex/bc7enc/bc7enc.cpp', True), ('src/gfx/tex/bc7enc/rgbcx.cpp', True), ('src/horizon2llvm/main.cpp', True)):
         cmd = [str(CLANG64 / ('clang++.exe' if cxx else 'clang.exe')), '-M', str(ROOT / src)]
         if cxx:
             cmd.append('-std=c++17')

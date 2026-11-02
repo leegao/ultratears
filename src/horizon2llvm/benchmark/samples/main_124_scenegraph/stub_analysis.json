@@ -1,0 +1,46 @@
+{
+  "sample_id": "main_124_scenegraph",
+  "total_arm64_insns": 2149,
+  "total_common_path_insns": 616,
+  "total_longest_path_insns": 3098,
+  "functions": [
+    {
+      "name": "f_8001e8260",
+      "entry_pc": 34361737824,
+      "static_insns": 2149,
+      "basic_blocks": 427,
+      "back_edges": 31,
+      "common_path_insns": 616,
+      "longest_path_insns": 3098
+    }
+  ],
+  "num_branch_sensitive": 3,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 20,
+  "external_stubs": [
+    "f_802ba4060",
+    "f_802ba4070",
+    "f_8001eec40",
+    "f_8001ea404",
+    "f_8027e540c",
+    "f_802ba4180",
+    "f_802ba41d0",
+    "f_802ba3ac0",
+    "f_8001eef84",
+    "f_80003340c",
+    "f_8001a1590",
+    "f_8008d94d8",
+    "f_802809130",
+    "f_8028011e4",
+    "f_8027e4e10",
+    "f_802809bb4",
+    "f_802809b18",
+    "f_802809600",
+    "f_802801134",
+    "f_8027cf27c",
+    "f_8027cf74c",
+    "f_8027cf000",
+    "f_802ba3ad0"
+  ]
+}

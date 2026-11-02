@@ -1,14 +1,23 @@
 // Guest address -> recompiled function lookup, and the host (HLE) function registry.
 // Based on LASRecomp runtime/dispatch.c (MIT); TOTK: three modules linked statically into the executable.
 #include <pthread.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "hle.h"
 #include "rt.h"
 
-// Tables emitted by tools/lifter/gen.py for each module (<name>_table.c).
-#define GAME_TABLE(n) extern const uint64_t n##_fn_addrs[]; extern const GuestFn n##_fn_ptrs[]; extern const uint64_t n##_fn_count;
+uint64_t g_icache_pc[G_ICACHE_SIZE];
+GuestFn  g_icache_fn[G_ICACHE_SIZE];
+
+// Tables emitted by src/horizon2llvm/gen.py for each module (<name>_table.c).
+#if defined(__linux__)
+#define WEAK_SYM __attribute__((weak))
+#else
+#define WEAK_SYM
+#endif
+#define GAME_TABLE(n) extern WEAK_SYM const uint64_t n##_fn_addrs[]; extern WEAK_SYM const GuestFn n##_fn_ptrs[]; extern WEAK_SYM const uint64_t n##_fn_count;
 GAME_TABLE(main)
 GAME_TABLE(subsdk0)
 GAME_TABLE(sdk)
@@ -29,7 +38,7 @@ static int override_count;
 
 // Host implementations registered by name (HLE_FUNC, hle.h)
 #if defined(__linux__)
-extern const HleImplEntry __start_hle_impls[], __stop_hle_impls[];
+extern __attribute__((weak)) const HleImplEntry __start_hle_impls[], __stop_hle_impls[];
 #else
 // PE/COFF: the linker sorts .hle$a < .hle$m (entries) < .hle$z by the text after '$'.
 __attribute__((section(".hle$a"), used)) static const HleImplEntry __start_hle_impls[1];
@@ -67,8 +76,10 @@ void hle_native_thunk(Cpu *c) {
 static __thread uint64_t unimpl_pc;
 static void hle_unimplemented(Cpu *c) {
     int i = (int)((unimpl_pc - HLE_BASE) / 16);
-    FATAL("unimplemented host function %s (x0=%llx x1=%llx lr=%llx)\n", hle_slots[i].name,
-          (unsigned long long)c->x[0], (unsigned long long)c->x[1], (unsigned long long)c->x[30]);
+    char lr_desc[192];
+    FATAL("unimplemented host function %s (x0=%llx x1=%llx lr=%llx %s)\n", hle_slots[i].name,
+          (unsigned long long)c->x[0], (unsigned long long)c->x[1], (unsigned long long)c->x[30],
+          rt_format_guest_addr(c->x[30], lr_desc, sizeof lr_desc));
 }
 
 uint64_t hle_register(const char *name, HostFn fn) {
@@ -113,15 +124,34 @@ void *hle_alloc(uint64_t size) {
 void dispatch_init(void) {
     const uint64_t *addrs[] = {main_fn_addrs, subsdk0_fn_addrs, sdk_fn_addrs};
     const GuestFn *fns[] = {main_fn_ptrs, subsdk0_fn_ptrs, sdk_fn_ptrs};
-    uint64_t counts[] = {main_fn_count, subsdk0_fn_count, sdk_fn_count};
-    for (int t = 0; t < MAX_MODULES; t++)
-        tables[t] = (FnTable){addrs[t], fns[t], counts[t], addrs[t][0], addrs[t][counts[t] - 1]};
+    uint64_t counts[] = {
+        (&main_fn_count && main_fn_addrs) ? main_fn_count : 0,
+        (&subsdk0_fn_count && subsdk0_fn_addrs) ? subsdk0_fn_count : 0,
+        (&sdk_fn_count && sdk_fn_addrs) ? sdk_fn_count : 0,
+    };
+    g_icache_pc[0] = ~0ULL;
+    for (int t = 0; t < MAX_MODULES; t++) {
+        uint64_t lo = counts[t] ? addrs[t][0] : 0;
+        uint64_t hi = counts[t] ? addrs[t][counts[t] - 1] : 0;
+        tables[t] = (FnTable){addrs[t], fns[t], counts[t], lo, hi};
+        for (uint64_t i = 0; i < counts[t]; i++) {
+            unsigned h = (unsigned)(addrs[t][i] >> 2) & G_ICACHE_MASK;
+            g_icache_pc[h] = addrs[t][i];
+            g_icache_fn[h] = fns[t][i];
+        }
+    }
+}
+
+void dispatch_register_fast(uint64_t addr, GuestFn fn) {
+    unsigned h = (unsigned)(addr >> 2) & G_ICACHE_MASK;
+    g_icache_pc[h] = addr;
+    g_icache_fn[h] = fn;
 }
 
 GuestFn dispatch_lookup(uint64_t addr) {
     for (int t = 0; t < MAX_MODULES; t++) {
         FnTable *ft = &tables[t];
-        if (addr < ft->lo || addr > ft->hi) continue;
+        if (!ft->count || addr < ft->lo || addr > ft->hi) continue;
         uint64_t lo = 0, hi = ft->count;
         while (lo < hi) {
             uint64_t mid = (lo + hi) / 2;
@@ -131,6 +161,73 @@ GuestFn dispatch_lookup(uint64_t addr) {
         if (lo < ft->count && ft->addrs[lo] == addr) return ft->fns[lo];
     }
     return NULL;
+}
+
+// Resolve any guest code address to the entry PC of the recompiled function `f_<entry>` containing it.
+uint64_t rt_guest_fn_at(uint64_t addr, uint64_t *offset) {
+    for (int t = 0; t < MAX_MODULES; t++) {
+        FnTable *ft = &tables[t];
+        if (!ft->count || addr < ft->lo) continue;
+        uint64_t text_end = ft->hi + 0x40000ull;
+        if (t < g_nmodules && g_modules[t].text_size) {
+            text_end = g_modules[t].base + g_modules[t].text_off + g_modules[t].text_size;
+        }
+        if (addr >= text_end) continue;
+        uint64_t lo = 0, hi = ft->count;  // first entry > addr
+        while (lo < hi) {
+            uint64_t mid = (lo + hi) / 2;
+            if (ft->addrs[mid] <= addr) lo = mid + 1;
+            else hi = mid;
+        }
+        if (!lo) continue;
+        uint64_t entry = ft->addrs[lo - 1];
+        if (offset) *offset = addr - entry;
+        return entry;
+    }
+    if (offset) *offset = 0;
+    return 0;
+}
+
+const char *rt_format_guest_addr(uint64_t addr, char *buf, size_t cap) {
+    if (!buf || !cap) return "";
+    if (!addr) {
+        snprintf(buf, cap, "0x0");
+        return buf;
+    }
+    if (addr >= HLE_BASE && addr < HLE_BASE + HLE_SIZE) {
+        int idx = (int)((addr - HLE_BASE) / 16);
+        const char *hname = (idx >= 0 && idx < hle_count && hle_slots[idx].name) ? hle_slots[idx].name : "?";
+        snprintf(buf, cap, "hle:%s", hname);
+        return buf;
+    }
+    uint64_t query_pc = (addr >= GUEST_LO + 4 && (addr & 3) == 0) ? (addr - 4) : addr;
+    uint64_t fn_off = 0, mod_off = 0, sym_off = 0;
+    uint64_t fn_entry = rt_guest_fn_at(query_pc, &fn_off);
+    if (fn_entry) fn_off = addr - fn_entry;
+    const char *mod = loader_module_at(addr, &mod_off);
+    const char *sym = loader_symbol_at(query_pc, &sym_off);
+    if (sym) sym_off = addr - (query_pc - sym_off);
+
+    if (fn_entry && mod && sym) {
+        snprintf(buf, cap, "f_%llx+%#llx [%s+%#llx] (%s+%#llx)",
+                 (unsigned long long)fn_entry, (unsigned long long)fn_off,
+                 mod, (unsigned long long)mod_off, sym, (unsigned long long)sym_off);
+    } else if (fn_entry && mod) {
+        snprintf(buf, cap, "f_%llx+%#llx [%s+%#llx]",
+                 (unsigned long long)fn_entry, (unsigned long long)fn_off,
+                 mod, (unsigned long long)mod_off);
+    } else if (fn_entry) {
+        snprintf(buf, cap, "f_%llx+%#llx",
+                 (unsigned long long)fn_entry, (unsigned long long)fn_off);
+    } else if (mod && sym) {
+        snprintf(buf, cap, "%s+%#llx [%s+%#llx]",
+                 sym, (unsigned long long)sym_off, mod, (unsigned long long)mod_off);
+    } else if (mod) {
+        snprintf(buf, cap, "%s+%#llx", mod, (unsigned long long)mod_off);
+    } else {
+        snprintf(buf, cap, "?");
+    }
+    return buf;
 }
 
 // Small direct-mapped cache in front of the binary search
@@ -152,10 +249,10 @@ static GuestFn dispatch_slow(Cpu *c) {
         if (overrides[i].addr == pc) return overrides[i].fn;
     GuestFn f = dispatch_lookup(pc);
     if (!f) {
-        uint64_t off = 0;
-        const char *s = loader_symbol_at(c->x[30], &off);
-        FATAL("no function at %llx (lr=%llx %s+%llx)\n", (unsigned long long)pc, (unsigned long long)c->x[30],
-              s ? s : "?", (unsigned long long)off);
+        char pc_desc[192], lr_desc[192];
+        FATAL("no function at %llx (%s) (lr=%llx %s)\n",
+              (unsigned long long)pc, rt_format_guest_addr(pc, pc_desc, sizeof pc_desc),
+              (unsigned long long)c->x[30], rt_format_guest_addr(c->x[30], lr_desc, sizeof lr_desc));
     }
     unsigned h = (unsigned)(pc >> 2) & (DCACHE - 1);
     dcache[h].addr = pc;
@@ -167,7 +264,7 @@ static GuestFn dispatch_slow(Cpu *c) {
 void rt_dispatch(Cpu *c) {
     unsigned h = (unsigned)(c->pc >> 2) & (DCACHE - 1);
     GuestFn f = dcache[h].addr == c->pc ? dcache[h].fn : dispatch_slow(c);
-    __attribute__((musttail)) return f(c);
+    TAIL return f(c);
 }
 
 void guest_call(Cpu *c, uint64_t addr) {
@@ -180,18 +277,22 @@ void guest_call(Cpu *c, uint64_t addr) {
 
 void rt_udf(Cpu *c, uint64_t pc) {
     (void)c;
-    FATAL("undefined instruction / trap at %llx\n", (unsigned long long)pc);
+    char desc[192];
+    FATAL("undefined instruction / trap at %llx (%s)\n",
+          (unsigned long long)pc, rt_format_guest_addr(pc, desc, sizeof desc));
 }
 
 void rt_brk(Cpu *c, uint32_t imm, uint64_t pc) {
     (void)c;
-    FATAL("brk #%u at %llx\n", imm, (unsigned long long)pc);
+    char desc[192];
+    FATAL("brk #%u at %llx (%s)\n", imm, (unsigned long long)pc, rt_format_guest_addr(pc, desc, sizeof desc));
 }
 
 void rt_fatal_trace(void) {
     plat_print_backtrace();
     fflush(stderr);
     plat_fatal_notice();
+    signal(SIGABRT, SIG_DFL);
     abort();
 }
 

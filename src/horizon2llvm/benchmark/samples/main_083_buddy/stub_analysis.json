@@ -1,0 +1,26 @@
+{
+  "sample_id": "main_083_buddy",
+  "total_arm64_insns": 1188,
+  "total_common_path_insns": 113,
+  "total_longest_path_insns": 1118,
+  "functions": [
+    {
+      "name": "f_80015f120",
+      "entry_pc": 34361176352,
+      "static_insns": 1188,
+      "basic_blocks": 187,
+      "back_edges": 5,
+      "common_path_insns": 113,
+      "longest_path_insns": 1118
+    }
+  ],
+  "num_branch_sensitive": 1,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 2,
+  "external_stubs": [
+    "f_800099860",
+    "f_802ba39a0",
+    "f_802ba39b0"
+  ]
+}

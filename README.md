@@ -2,7 +2,7 @@
 
 **UltraTears** is an unofficial native PC port of *The Legend of Zelda: Tears of the Kingdom* (Nintendo Switch,
 version 1.4.3) for Windows. Steam Deck and Linux support is planned and is a high priority. It is not an emulator: the
-game's program code is translated ahead of time (static recompilation, ARM64 → C → x86-64), and the Switch system and
+game's program code is translated ahead of time (static recompilation, ARM64 → LLVM IR → x86-64), and the Switch system and
 its NVN graphics API are replaced by the port's own implementations on Windows and Vulkan. Shaders and textures are
 converted for PC graphics cards when the game is built, not while you play.
 
@@ -106,7 +106,7 @@ Double-click `setup.bat` and leave its window open. The builder runs these steps
 |---|---|---|
 | `check` | The folder structure and exact game version 1.4.3 are checked | seconds |
 | `romfs` | 304,000 files are packed into `data\romfs\romfs.bin` | ~4 min |
-| `lift` | Game code from the ExeFS is translated to C | ~2 min |
+| `lift` | Game code from the ExeFS is lifted to LLVM IR and lowered via LLVM passes | ~2 min |
 | `compile` | The game code and port are compiled into `UltraTears.exe` | ~15 min |
 | `shaders` | The shaders are translated for Vulkan | ~5 min |
 | `textures` | The textures are converted to BC7/BC1 | ~7 min |

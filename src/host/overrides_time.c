@@ -1,9 +1,8 @@
 /* nn::time for the functions the game imports, backed by the host clock and time zone.
  * Ported from MacNativeGames games/totk/runtime/time_host.c @b75be8c (MIT). Changes: guest-register wrappers;
- * Windows clock and time-zone calls. User and network system clocks both follow the host wall clock; the steady clock
+ * Windows/Linux clock and time-zone calls. User and network system clocks both follow the host wall clock; the steady clock
  * counts seconds of host monotonic time with one source id per process. ClockSnapshot uses the public 0xD0-byte
- * layout because game code may read its fields through inline accessors.
- * TODO(port): the snapshot's location name is "UTC"; map the Windows time zone to its IANA name. */
+ * layout because game code may read its fields through inline accessors. */
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
@@ -50,15 +49,16 @@ static int64_t posix_now(void) {
     return (int64_t)time(NULL) + off;
 }
 
-static int32_t local_utc_offset(int *dst) {
+static int32_t local_utc_offset(const struct tm *tm_local, int *dst) {
 #ifdef _WIN32
+    (void)tm_local;
     TIME_ZONE_INFORMATION tz;
     DWORD r = GetTimeZoneInformation(&tz);
     *dst = r == TIME_ZONE_ID_DAYLIGHT;
     return -(int32_t)(tz.Bias + (r == TIME_ZONE_ID_DAYLIGHT ? tz.DaylightBias : r == TIME_ZONE_ID_STANDARD ? tz.StandardBias : 0)) * 60;
 #else
-    *dst = 0;
-    return 0;
+    *dst = tm_local->tm_isdst > 0;
+    return (int32_t)tm_local->tm_gmtoff;
 #endif
 }
 
@@ -73,7 +73,7 @@ static void fill_calendar(CalendarTime *c, CalendarAdditionalInfo *info, int64_t
         info->day_of_week = tm.tm_wday;
         info->day_of_year = tm.tm_yday;
         int dst = 0;
-        int32_t offset = local ? local_utc_offset(&dst) : 0;
+        int32_t offset = local ? local_utc_offset(&tm, &dst) : 0;
         snprintf(info->name, sizeof info->name, "%s", local ? "LOCAL" : "UTC");
         info->dst = (uint8_t)(local && dst);
         info->utc_offset = offset;

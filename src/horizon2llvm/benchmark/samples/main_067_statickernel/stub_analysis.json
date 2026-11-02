@@ -1,0 +1,31 @@
+{
+  "sample_id": "main_067_statickernel",
+  "total_arm64_insns": 1410,
+  "total_common_path_insns": 131,
+  "total_longest_path_insns": 513,
+  "functions": [
+    {
+      "name": "f_8001161d0",
+      "entry_pc": 34360877520,
+      "static_insns": 1410,
+      "basic_blocks": 111,
+      "back_edges": 3,
+      "common_path_insns": 131,
+      "longest_path_insns": 513
+    }
+  ],
+  "num_branch_sensitive": 1,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 1,
+  "num_constant_zero": 6,
+  "external_stubs": [
+    "f_8001177d8",
+    "f_800117868",
+    "f_802ba41d0",
+    "f_8000ef570",
+    "f_802843244",
+    "f_802844c70",
+    "f_802844d84",
+    "f_802855d74"
+  ]
+}

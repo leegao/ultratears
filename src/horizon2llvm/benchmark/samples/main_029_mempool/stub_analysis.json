@@ -1,0 +1,31 @@
+{
+  "sample_id": "main_029_mempool",
+  "total_arm64_insns": 710,
+  "total_common_path_insns": 41,
+  "total_longest_path_insns": 274,
+  "functions": [
+    {
+      "name": "f_800079d20",
+      "entry_pc": 34360237344,
+      "static_insns": 710,
+      "basic_blocks": 200,
+      "back_edges": 9,
+      "common_path_insns": 41,
+      "longest_path_insns": 274
+    }
+  ],
+  "num_branch_sensitive": 1,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 7,
+  "external_stubs": [
+    "f_802ba4060",
+    "f_80007a838",
+    "f_802ba4070",
+    "f_80017c9c8",
+    "f_800099ce0",
+    "f_802ba3ac0",
+    "f_8027a9c88",
+    "f_80017cbe0"
+  ]
+}

@@ -1,12 +1,19 @@
-// [Windows port] One-frame-chain timeline (totk_timeline.h), from MacNativeGames' totk_timeline.c (MIT). Changes: the
-// host clock is runtime_now_ns (QueryPerformanceCounter), thread ids from GetCurrentThreadId; GPU spans come from the
-// Vulkan back end (a timestamp at the start and end of each command buffer, placed so that it ends when the retire thread
-// saw its fence). TOTK_TIMELINE=<file>:<first frame>:<frames>; tools/dev_timeline.py reads the file.
+// [Windows & Linux port] One-frame-chain timeline (totk_timeline.h), from MacNativeGames' totk_timeline.c (MIT).
+// TOTK_TIMELINE=<file>:<first frame>:<frames>; tools/dev_timeline.py reads the file.
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
 #include <windows.h>
+static inline uint32_t current_tid(void) { return (uint32_t)GetCurrentThreadId(); }
+#else
+#include <unistd.h>
+static inline uint32_t current_tid(void) { return (uint32_t)gettid(); }
+#endif
 
 #include "totk_timeline.h"
 
@@ -47,7 +54,7 @@ void totk_tl_at(int kind, uint64_t t_ns, uint64_t a, uint64_t b) {
     if (!totk_tl_on()) return;
     uint64_t i = atomic_fetch_add_explicit(&g_n, 1, memory_order_relaxed);
     if (i >= TL_CAP) return;
-    g_ev[i] = (tl_ev){t_ns, a, b, (uint32_t)kind, (uint32_t)GetCurrentThreadId(), atomic_load_explicit(&g_frame, memory_order_relaxed)};
+    g_ev[i] = (tl_ev){t_ns, a, b, (uint32_t)kind, current_tid(), atomic_load_explicit(&g_frame, memory_order_relaxed)};
 }
 void totk_tl(int kind, uint64_t a, uint64_t b) {
     if (!totk_tl_on()) return;

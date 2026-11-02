@@ -1,0 +1,33 @@
+{
+  "sample_id": "main_050_renderpass",
+  "total_arm64_insns": 2144,
+  "total_common_path_insns": 91,
+  "total_longest_path_insns": 2486,
+  "functions": [
+    {
+      "name": "f_8000dbae0",
+      "entry_pc": 34360638176,
+      "static_insns": 2144,
+      "basic_blocks": 369,
+      "back_edges": 9,
+      "common_path_insns": 91,
+      "longest_path_insns": 2486
+    }
+  ],
+  "num_branch_sensitive": 0,
+  "num_pointer_alloc": 1,
+  "num_memory_copy": 0,
+  "num_constant_zero": 9,
+  "external_stubs": [
+    "f_802ba41d0",
+    "f_8000a4db4",
+    "f_80283fa6c",
+    "f_80283e894",
+    "f_80283afac",
+    "f_80283e54c",
+    "f_8027d3594",
+    "f_8007ef2c0",
+    "f_8001ebdfc",
+    "f_80021b4ac"
+  ]
+}

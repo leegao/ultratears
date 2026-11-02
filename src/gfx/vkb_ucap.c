@@ -225,3 +225,69 @@ void vkb_ucap_drop(uint64_t addr, uint64_t len) {   // a GPU write to [addr, add
 void vkb_ucap_stats(uint64_t *caps, uint64_t *bytes, uint64_t *ns, uint64_t *hits, uint64_t *drops) {
     *caps = g_caps; *bytes = g_cap_bytes; *ns = g_cap_ns; *hits = vkb_cnt_sum(g_hits); *drops = g_drops;
 }
+
+/*
+ * UCAP Binary Serialization Format (ucap.bin):
+ * +---------------------------------------------------------------------------+
+ * | Offset        | Type            | Field      | Description                |
+ * +---------------+-----------------+------------+----------------------------+
+ * | 0x00          | uint32_t        | n          | Disjoint range count       |
+ * | 0x04          | uint64_t        | done       | Completed fence at capture |
+ * | 0x0C          | rng[n] (16B*n)  | r          | Sorted [lo, hi) addresses  |
+ * | 0x0C + 16*n   | size_t[n] (8B*n)| off        | Byte offset into payload   |
+ * | 0x0C + 24*n   | size_t (8B)     | total      | Total byte payload length  |
+ * | 0x14 + 24*n   | uint8_t[total]  | bytes      | Captured UBO/SSBO bytes    |
+ * +---------------------------------------------------------------------------+
+ */
+void *vkb_ucap_dump_save(FILE *f) {
+    if (!g_cur) { uint32_t zero = 0; fwrite(&zero, sizeof zero, 1, f); return NULL; }
+    uint32_t n = (uint32_t)g_cur->n;
+    fwrite(&n, sizeof n, 1, f);
+    fwrite(&g_cur->done, sizeof g_cur->done, 1, f);
+    if (n) {
+        fwrite(g_cur->r, sizeof *g_cur->r, n, f);
+        fwrite(g_cur->off, sizeof *g_cur->off, n, f);
+        size_t total = g_cur->off[n - 1] + (size_t)(g_cur->r[n - 1].hi - g_cur->r[n - 1].lo);
+        fwrite(&total, sizeof total, 1, f);
+        fwrite(g_cur->bytes, 1, total, f);
+    }
+    return g_cur;
+}
+
+// Clones an in-memory ucap snapshot so multi-iteration replay benchmarks can pass a fresh
+// copy to mtl_sub_snapshot_ubos_cap() each iteration (which consumes and frees its input).
+void *vkb_ucap_clone(const void *src) {
+
+    if (!src) return NULL;
+    const ucap *s = (const ucap *)src;
+    ucap *c = calloc(1, sizeof *c);
+    c->n = s->n;
+    c->done = s->done;
+    if (s->n > 0) {
+        c->r = malloc(sizeof *c->r * (size_t)s->n);
+        memcpy(c->r, s->r, sizeof *c->r * (size_t)s->n);
+        c->off = malloc(sizeof *c->off * (size_t)s->n);
+        memcpy(c->off, s->off, sizeof *c->off * (size_t)s->n);
+        size_t total = s->off[s->n - 1] + (s->r[s->n - 1].hi - s->r[s->n - 1].lo);
+        c->bytes = malloc(total ? total : 1);
+        memcpy(c->bytes, s->bytes, total);
+    }
+    return c;
+}
+
+void *vkb_ucap_load_read(FILE *f) {
+    uint32_t n = 0;
+    if (fread(&n, sizeof n, 1, f) != 1 || !n) return NULL;
+    ucap *c = calloc(1, sizeof *c);
+    c->n = (int)n;
+    fread(&c->done, sizeof c->done, 1, f);
+    c->r = malloc(sizeof *c->r * n);
+    c->off = malloc(sizeof *c->off * n);
+    fread(c->r, sizeof *c->r, n, f);
+    fread(c->off, sizeof *c->off, n, f);
+    size_t total = 0;
+    fread(&total, sizeof total, 1, f);
+    c->bytes = malloc(total ? total : 1);
+    fread(c->bytes, 1, total, f);
+    return c;
+}

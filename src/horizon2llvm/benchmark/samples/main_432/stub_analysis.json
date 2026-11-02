@@ -1,0 +1,82 @@
+{
+  "sample_id": "main_432",
+  "total_arm64_insns": 1509,
+  "total_common_path_insns": 632,
+  "total_longest_path_insns": 4401,
+  "functions": [
+    {
+      "name": "f_80077bc00",
+      "entry_pc": 34367585280,
+      "static_insns": 127,
+      "basic_blocks": 1,
+      "back_edges": 0,
+      "common_path_insns": 134,
+      "longest_path_insns": 134
+    },
+    {
+      "name": "f_80077be18",
+      "entry_pc": 34367585816,
+      "static_insns": 179,
+      "basic_blocks": 36,
+      "back_edges": 2,
+      "common_path_insns": 105,
+      "longest_path_insns": 577
+    },
+    {
+      "name": "f_80077c0e4",
+      "entry_pc": 34367586532,
+      "static_insns": 39,
+      "basic_blocks": 10,
+      "back_edges": 1,
+      "common_path_insns": 32,
+      "longest_path_insns": 76
+    },
+    {
+      "name": "f_80077c180",
+      "entry_pc": 34367586688,
+      "static_insns": 961,
+      "basic_blocks": 243,
+      "back_edges": 20,
+      "common_path_insns": 320,
+      "longest_path_insns": 3424
+    },
+    {
+      "name": "f_80077d084",
+      "entry_pc": 34367590532,
+      "static_insns": 203,
+      "basic_blocks": 43,
+      "back_edges": 1,
+      "common_path_insns": 41,
+      "longest_path_insns": 190
+    }
+  ],
+  "num_branch_sensitive": 8,
+  "num_pointer_alloc": 1,
+  "num_memory_copy": 0,
+  "num_constant_zero": 14,
+  "external_stubs": [
+    "f_8003f9d50",
+    "f_8000340bc",
+    "f_800789c30",
+    "f_800b54d3c",
+    "f_800781d60",
+    "f_8001a1590",
+    "f_800079d20",
+    "f_802ba39a0",
+    "f_802ba39b0",
+    "f_802ba40a0",
+    "f_802ba40b0",
+    "f_802ba41b0",
+    "f_802ba4a70",
+    "f_80077fee0",
+    "f_802ba4080",
+    "f_8001a6c10",
+    "f_80077d3b0",
+    "f_80077fec4",
+    "f_8001797dc",
+    "f_80084d7f0",
+    "f_8002152a0",
+    "f_802ba3ac0",
+    "f_8027d342c"
+  ]
+}

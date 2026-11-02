@@ -7,7 +7,9 @@
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
 #include <direct.h>
+#endif
 
 #include "compat/gfx_compat.h"
 #include "host/hle.h"
@@ -19,6 +21,7 @@
 #include "nvn/totk_vpool.h"
 #include "vkb_audit.h"
 #include "vkb_lock.h"
+#include "vkb_capture.h"
 
 #define VLOG(...) LOG("[vk] " __VA_ARGS__)
 
@@ -602,7 +605,6 @@ int vkb_tex_stale(vkb_image *im) {
     uint64_t sub = mtl_last_fence() + 1;
     if (!im->upload_stamp || im->gpu_written || !im->storage) return 0;
     if (im->cpu_written) return 1;
-    if (im->vpool_gen && im->vpool_gen != totk_vpool_generation()) return 1;   // a virtual pool's mapping changed
     if (__atomic_load_n(&im->dirty_checked, __ATOMIC_ACQUIRE) != sub) {
         int mt = vkb_mt_recording();
         if (mt) {   // one thread checks; the others wait for its answer
@@ -611,8 +613,12 @@ int vkb_tex_stale(vkb_image *im) {
         }
         nvn_texlayout L;
         nvn_tex_layout(&im->d, &L);
-        // a virtual pool: the physical pages behind it; [temporary] untracked memory (CPU-no-access pools hold GPU data)
-        // counts as unchanged: uploaded once
+        if (im->vpool_gen && im->vpool_gen != totk_vpool_range_gen((uintptr_t)im->storage, L.size)) {
+            im->stale = 1;
+            __atomic_store_n(&im->dirty_checked, sub, __ATOMIC_RELEASE);
+            if (mt) pthread_mutex_unlock(&g_mu);
+            return 1;
+        }
         int v = im->vpool_gen ? totk_vpool_dirty_since((uintptr_t)im->storage, L.size, im->upload_stamp) : -1;
         im->stale = v >= 0 ? v : nvn_dirty_tracked(im->storage, L.size) && nvn_dirty_since(im->storage, L.size, im->upload_stamp);
         static long long log_serial = -1;   // TOTK_VK_STALE_LOG=<texture serial>: the check's answers (development)
@@ -909,7 +915,7 @@ static int tex_upload(VkCommandBuffer cb, vkb_image *im) {
     // the pages behind it are written or the mapping changes ([temporary]: any MapVirtual; Vulkan sparse binding later).
     const uint8_t *src = im->storage;
     uint8_t *gathered = NULL;
-    uint64_t gen = totk_vpool_generation();
+    uint64_t gen = totk_vpool_range_gen((uintptr_t)im->storage, L.size);
     if (totk_vpool_gather((uintptr_t)im->storage, 0, NULL)) {   // (length 0: only whether it is in a virtual pool)
         gathered = malloc(L.size ? L.size : 1);
         if (!gathered) die("texture gather");
@@ -1506,4 +1512,115 @@ void vkb_tex_dump(const char *dir) {
         p = strchr(end, ',');
         if (p) p++;
     }
+}
+
+void vkb_images_dump(const char *dir) {
+    char metapath[512];
+    snprintf(metapath, sizeof metapath, "%s/images.meta", dir);
+    FILE *fm = fopen(metapath, "wb");
+    if (!fm) return;
+
+    typedef struct { vkb_image *im; uint8_t *px; uint32_t bpp; uint64_t serial; } img_job;
+    img_job jobs[1024];
+    int njobs = 0;
+
+    mtl_sub_begin();
+    VkCommandBuffer cb = vkb_cmd();
+
+    vkb_lock(&g_mu, LK_IMAGES);
+    uint32_t count = 0;
+    for (entry *e = g_all; e; e = e->all_next) if (e->refs) count++;
+    fwrite(&count, sizeof count, 1, fm);
+
+    for (entry *e = g_all; e; e = e->all_next) {
+        if (!e->refs) continue;
+        uint32_t has_pixels = 0, bpp = 0;
+        uint8_t *px = NULL;
+        if (e->im.gpu_written || (e->im.upload_stamp && getenv("TOTK_DUMP_ALL"))) {
+            px = dump_copy(cb, &e->im, 0, &bpp);
+            if (px) {
+                has_pixels = 1;
+                if (njobs < 1024) jobs[njobs++] = (img_job){&e->im, px, bpp, e->im.serial};
+            }
+        }
+        vkb_image_meta m = {
+            .serial = e->im.serial,
+            .d = e->im.d,
+            .width = e->im.width, .height = e->im.height, .depth = e->im.depth,
+            .levels = e->im.levels, .layers = e->im.layers, .format = (int)e->im.format,
+            .aspect = e->im.aspect, .storage = (uint64_t)(uintptr_t)e->im.storage,
+            .gpu_written = e->im.gpu_written, .upload_stamp = e->im.upload_stamp,
+            .has_layout = e->has_layout,
+            .has_pixels = has_pixels, .pixel_bytes = has_pixels ? e->im.width * e->im.height * bpp : 0
+        };
+        memcpy(m.layout, e->layout, sizeof m.layout);
+        fwrite(&m, sizeof m, 1, fm);
+    }
+    pthread_mutex_unlock(&g_mu);
+    fclose(fm);
+
+    if (njobs > 0) {
+        mtl_wait(mtl_sub_commit(), UINT64_MAX);
+        mtl_sub_begin();
+        for (int k = 0; k < njobs; k++) {
+            char ppath[512];
+            snprintf(ppath, sizeof ppath, "%s/textures/tex_%llu.bin", dir, (unsigned long long)jobs[k].serial);
+            FILE *fp = fopen(ppath, "wb");
+            if (fp) {
+                size_t sz = (size_t)jobs[k].im->width * jobs[k].im->height * jobs[k].bpp;
+                fwrite(jobs[k].px, 1, sz, fp);
+                fclose(fp);
+            }
+        }
+    }
+}
+
+void vkb_images_load(const char *dir) {
+    char metapath[512];
+    snprintf(metapath, sizeof metapath, "%s/images.meta", dir);
+    FILE *fm = fopen(metapath, "rb");
+    if (!fm) return;
+    uint32_t count = 0;
+    if (fread(&count, sizeof count, 1, fm) != 1) { fclose(fm); return; }
+
+    mtl_sub_begin();
+    VkCommandBuffer cb = vkb_cmd();
+
+    for (uint32_t i = 0; i < count; i++) {
+        vkb_image_meta m;
+        if (fread(&m, sizeof m, 1, fm) != 1) break;
+        tex_t t = {
+            .magic = MAGIC('T', 'E', 'X', '_'),
+            .d = m.d,
+            .mem = (uint8_t *)(uintptr_t)m.storage,
+            .serial = m.serial,
+            .has_layout = m.has_layout
+        };
+        memcpy(t.layout, m.layout, sizeof t.layout);
+        vkb_image *im = vkb_image_of(&t);
+        if (im && m.has_pixels) {
+            char ppath[512];
+            snprintf(ppath, sizeof ppath, "%s/textures/tex_%llu.bin", dir, (unsigned long long)m.serial);
+            FILE *fp = fopen(ppath, "rb");
+            if (fp) {
+                uint8_t *buf = malloc(m.pixel_bytes);
+                if (buf && fread(buf, 1, m.pixel_bytes, fp) == m.pixel_bytes) {
+                    VkBuffer sb; VkDeviceSize soff;
+                    uint8_t *p = vkb_ring_alloc(m.pixel_bytes, 16, &sb, &soff);
+                    memcpy(p, buf, m.pixel_bytes);
+                    vkb_image_use(cb, im, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_PIPELINE_STAGE_2_COPY_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+                    VkBufferImageCopy r = {
+                        .bufferOffset = soff,
+                        .imageSubresource = {im->aspect, 0, 0, 1},
+                        .imageExtent = {im->width, im->height, 1}
+                    };
+                    vk.vkCmdCopyBufferToImage(cb, sb, im->img, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &r);
+                }
+                free(buf);
+                fclose(fp);
+            }
+        }
+    }
+    fclose(fm);
+    mtl_wait(mtl_sub_commit(), UINT64_MAX);
 }

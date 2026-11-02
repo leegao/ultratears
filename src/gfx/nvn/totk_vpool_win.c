@@ -1,7 +1,7 @@
-// [Windows port] NVN physical / virtual memory pools (the API of MacNativeGames' totk_vpool.h).
+// [Windows & Linux port] NVN physical / virtual memory pools (the API of MacNativeGames' totk_vpool.h).
 // MacNativeGames maps a virtual pool's 64 KiB pages onto physical pools' pages a second time (mach_vm_remap). Windows
-// cannot alias ordinary private memory, and a virtual pool is a GPU address range: the game reaches the physical memory
-// through the physical pool, the GPU through the virtual one. So here a virtual pool is
+// and anonymous private mappings cannot alias ordinary private memory, and a virtual pool is a GPU address range: the
+// game reaches the physical memory through the physical pool, the GPU through the virtual one. So here a virtual pool is
 //  - a unique reserved, inaccessible address range (its GPU addresses; a CPU access faults visibly), and
 //  - a page table: virtual 64 KiB page -> (physical pool, offset), which the GPU back end resolves (later: Vulkan
 //    sparse binding of the physical pools' memory).
@@ -9,7 +9,12 @@
 #include <stdatomic.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <errno.h>
+#include <sys/mman.h>
+#endif
 
 #include "../host/hle.h"
 #include "nvn_dirty.h"
@@ -21,7 +26,7 @@
 #define F_VIRTUAL NVN_MEMORY_POOL_FLAGS_VIRTUAL
 #define POOL_MAGIC MAGIC('P', 'O', 'O', 'L')
 
-typedef struct { const pool_t *phys; uint64_t off; } vpage;   // phys NULL: unmapped
+typedef struct { const pool_t *phys; uint64_t off, gen; } vpage;   // phys NULL: unmapped
 typedef struct vtable { const pool_t *pool; uint64_t npages; vpage *pages; struct vtable *next; } vtable;
 static vtable *g_tables;
 static pthread_mutex_t g_map_mu = PTHREAD_MUTEX_INITIALIZER;
@@ -42,9 +47,19 @@ int totk_vpool_init(pool_t *o) {
     if (phys && !(o->flags & F_CPU_NO_ACCESS)) return 1;   // the game storage itself
     o->span = o->size;
     if (phys) {   // CPU_NO_ACCESS: our own storage
+#ifdef _WIN32
         o->host = VirtualAlloc(NULL, o->span, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+#else
+        void *p = mmap(NULL, o->span, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        o->host = p == MAP_FAILED ? NULL : p;
+#endif
     } else {      // virtual: addresses only
+#ifdef _WIN32
         o->host = VirtualAlloc(NULL, o->span, MEM_RESERVE, PAGE_NOACCESS);
+#else
+        void *p = mmap(NULL, o->span, PROT_NONE, MAP_PRIVATE | MAP_ANONYMOUS | MAP_NORESERVE, -1, 0);
+        o->host = p == MAP_FAILED ? NULL : p;
+#endif
         vtable *t = calloc(1, sizeof *t);
         if (!t) die("vpool: table allocation");
         t->pool = o; t->npages = o->size / TOTK_VPOOL_PAGE;
@@ -52,7 +67,14 @@ int totk_vpool_init(pool_t *o) {
         if (!t->pages) die("vpool: page table allocation");
         pthread_mutex_lock(&g_map_mu); t->next = g_tables; g_tables = t; pthread_mutex_unlock(&g_map_mu);
     }
-    if (!o->host) { LOG("vpool: VirtualAlloc(%#llx) failed (%lu)", (unsigned long long)o->span, GetLastError()); return 0; }
+    if (!o->host) {
+#ifdef _WIN32
+        LOG("vpool: VirtualAlloc(%#llx) failed (%lu)", (unsigned long long)o->span, GetLastError());
+#else
+        LOG("vpool: mmap(%#llx) failed (%d)", (unsigned long long)o->span, errno);
+#endif
+        return 0;
+    }
     o->mem = o->host;
     return 1;
 }
@@ -63,7 +85,11 @@ int totk_vpool_fini(pool_t *o) {
     for (vtable **p = &g_tables; *p; p = &(*p)->next)
         if ((*p)->pool == o) { vtable *t = *p; *p = t->next; free(t->pages); free(t); break; }
     pthread_mutex_unlock(&g_map_mu);
+#ifdef _WIN32
     VirtualFree(o->host, 0, MEM_RELEASE);
+#else
+    munmap(o->host, o->span);
+#endif
     o->host = NULL; o->mem = o->game_mem; o->span = 0;
     return 1;
 }
@@ -88,15 +114,38 @@ int totk_vpool_map(pool_t *v, int count, const totk_mapping_request *r) {
     pthread_mutex_lock(&g_map_mu);
     vtable *t = table_of(v);
     if (!t) { pthread_mutex_unlock(&g_map_mu); die("vpool: virtual pool %p has no page table", (void *)v); }
+    uint64_t gen = atomic_fetch_add(&g_map_gen, 1) + 1;
     for (int i = 0; i < count; i++) {
         uint64_t first = (uint64_t)r[i].virtual_offset / TOTK_VPOOL_PAGE, n = r[i].size / TOTK_VPOOL_PAGE;
-        for (uint64_t k = 0; k < n; k++)
-            t->pages[first + k] = (vpage){(const pool_t *)(const void *)r[i].physical_pool,
-                                          r[i].physical_pool ? (uint64_t)r[i].physical_offset + k * TOTK_VPOOL_PAGE : 0};
+        const pool_t *phys = (const pool_t *)(const void *)r[i].physical_pool;
+        for (uint64_t k = 0; k < n; k++) {
+            uint64_t off = phys ? (uint64_t)r[i].physical_offset + k * TOTK_VPOOL_PAGE : 0;
+            vpage *vp = &t->pages[first + k];
+            if (vp->phys != phys || vp->off != off)
+                *vp = (vpage){phys, off, gen};
+        }
     }
     pthread_mutex_unlock(&g_map_mu);
-    atomic_fetch_add(&g_map_gen, 1);
     return 1;
+}
+
+uint64_t totk_vpool_range_gen(uintptr_t va, uint64_t len) {
+    if (!len) return 0;
+    uint64_t max_gen = 0;
+    pthread_mutex_lock(&g_map_mu);
+    for (vtable *t = g_tables; t; t = t->next) {
+        uintptr_t base = (uintptr_t)t->pool->mem;
+        if (va < base || va - base >= t->pool->size) continue;
+        uint64_t end = (va - base) + len;
+        if (end > t->pool->size) end = t->pool->size;
+        uint64_t p0 = (va - base) / TOTK_VPOOL_PAGE, p1 = (end + TOTK_VPOOL_PAGE - 1) / TOTK_VPOOL_PAGE;
+        max_gen = 1;
+        for (uint64_t p = p0; p < p1; p++)
+            if (t->pages[p].gen > max_gen) max_gen = t->pages[p].gen;
+        break;
+    }
+    pthread_mutex_unlock(&g_map_mu);
+    return max_gen;
 }
 
 uint64_t totk_vpool_generation(void) { return atomic_load(&g_map_gen); }
@@ -125,9 +174,6 @@ int totk_vpool_gather(uintptr_t va, uint64_t len, void *dst) {
 }
 
 // Whether the physical memory behind [va, va+len) of a virtual pool was written since `stamp` (nvn_dirty generations).
-// The virtual range itself is never written (no CPU access): the game writes the physical pools' memory, so a texture
-// in a virtual pool is checked page by page there (TOTK's pre-rendered cutscenes: the movie frame, every frame).
-// Untracked backing (CPU_NO_ACCESS pools: GPU data) counts as unchanged. -1: not in a virtual pool.
 int totk_vpool_dirty_since(uintptr_t va, uint64_t len, uint64_t stamp) {
     int found = -1;
     pthread_mutex_lock(&g_map_mu);

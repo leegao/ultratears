@@ -1,0 +1,25 @@
+{
+  "sample_id": "main_068_ecs",
+  "total_arm64_insns": 2608,
+  "total_common_path_insns": 470,
+  "total_longest_path_insns": 2872,
+  "functions": [
+    {
+      "name": "f_800129820",
+      "entry_pc": 34360956960,
+      "static_insns": 2608,
+      "basic_blocks": 638,
+      "back_edges": 84,
+      "common_path_insns": 470,
+      "longest_path_insns": 2872
+    }
+  ],
+  "num_branch_sensitive": 0,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 2,
+  "external_stubs": [
+    "f_80021b4ac",
+    "f_8027cf394"
+  ]
+}

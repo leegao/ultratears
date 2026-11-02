@@ -1,0 +1,26 @@
+{
+  "sample_id": "main_111_slab",
+  "total_arm64_insns": 1476,
+  "total_common_path_insns": 146,
+  "total_longest_path_insns": 1400,
+  "functions": [
+    {
+      "name": "f_8001bbb90",
+      "entry_pc": 34361555856,
+      "static_insns": 1476,
+      "basic_blocks": 181,
+      "back_edges": 4,
+      "common_path_insns": 146,
+      "longest_path_insns": 1400
+    }
+  ],
+  "num_branch_sensitive": 1,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 2,
+  "external_stubs": [
+    "f_802ba39a0",
+    "f_802ba39b0",
+    "f_800099860"
+  ]
+}

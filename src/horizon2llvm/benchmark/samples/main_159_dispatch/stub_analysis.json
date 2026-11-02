@@ -1,0 +1,25 @@
+{
+  "sample_id": "main_159_dispatch",
+  "total_arm64_insns": 1266,
+  "total_common_path_insns": 152,
+  "total_longest_path_insns": 7800,
+  "functions": [
+    {
+      "name": "f_8002824a0",
+      "entry_pc": 34362369184,
+      "static_insns": 1266,
+      "basic_blocks": 370,
+      "back_edges": 54,
+      "common_path_insns": 152,
+      "longest_path_insns": 7800
+    }
+  ],
+  "num_branch_sensitive": 2,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 0,
+  "external_stubs": [
+    "f_8028e5c98",
+    "f_8028e5e6c"
+  ]
+}

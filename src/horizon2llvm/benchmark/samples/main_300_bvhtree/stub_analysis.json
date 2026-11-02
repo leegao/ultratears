@@ -1,0 +1,37 @@
+{
+  "sample_id": "main_300_bvhtree",
+  "total_arm64_insns": 973,
+  "total_common_path_insns": 92,
+  "total_longest_path_insns": 1401,
+  "functions": [
+    {
+      "name": "f_8004e71b0",
+      "entry_pc": 34364879280,
+      "static_insns": 648,
+      "basic_blocks": 102,
+      "back_edges": 12,
+      "common_path_insns": 29,
+      "longest_path_insns": 1243
+    },
+    {
+      "name": "f_8004e8eec",
+      "entry_pc": 34364886764,
+      "static_insns": 325,
+      "basic_blocks": 47,
+      "back_edges": 0,
+      "common_path_insns": 63,
+      "longest_path_insns": 158
+    }
+  ],
+  "num_branch_sensitive": 0,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 5,
+  "external_stubs": [
+    "f_8004e7bd0",
+    "f_8027e47f8",
+    "f_80009bf90",
+    "f_801c1ed1c",
+    "f_80009bf94"
+  ]
+}

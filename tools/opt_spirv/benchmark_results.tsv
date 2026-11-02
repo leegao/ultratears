@@ -1,0 +1,8 @@
+Config	InPassP50	InPassAvg	InPassDeltaPct	SpanP50	OptTimeSec
+Baseline (Ryujinx Raw)	18.183	18.241	0.00	21.071	0.19
+Pass 1: Strip NoContraction Only	18.227	18.528	0.24	21.117	0.54
+spirv-opt -O Only	18.399	18.498	1.19	21.229	10.65
+Combined: Strip + spirv-opt -O	18.118	18.216	-0.36	21.014	10.20
+Strip + ADCE Only	18.109	18.212	-0.41	21.006	5.19
+Strip + Const Dedup Only	18.319	18.336	0.75	21.206	4.73
+Strip + Simplify & Redundancy	18.461	18.528	1.53	21.333	7.28

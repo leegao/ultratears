@@ -1,0 +1,28 @@
+{
+  "sample_id": "main_475_threadpool",
+  "total_arm64_insns": 310,
+  "total_common_path_insns": 105,
+  "total_longest_path_insns": 508,
+  "functions": [
+    {
+      "name": "f_80084d7f0",
+      "entry_pc": 34368444400,
+      "static_insns": 310,
+      "basic_blocks": 107,
+      "back_edges": 9,
+      "common_path_insns": 105,
+      "longest_path_insns": 508
+    }
+  ],
+  "num_branch_sensitive": 2,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 3,
+  "external_stubs": [
+    "f_802ba3ac0",
+    "f_802ba4060",
+    "f_802ba4070",
+    "f_800099ae0",
+    "f_8002908bc"
+  ]
+}

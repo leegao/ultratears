@@ -1,22 +1,9 @@
 """Build UltraTears from the player's own dump, in one command: every step is checked and can be resumed.
 
-From a Git checkout the build goes to dist\\, or to --output <folder>. The tracked source files are copied there and
-missing build tools are downloaded from the latest GitHub builder release. In a builder package setup runs in place.
-usage: python tools/setup.py [--output <build folder>] [--dump <folder with exefs\\ and romfs\\>] [--cpus N]
-The dump is game\\ in the checkout/build folder unless --dump names another (remembered for later runs); run it again
-to resume, or to rebuild what changed after an update of the port.
-The dump: the ExeFS and RomFS of The Legend of Zelda: Tears of the Kingdom with update 1.4.3 applied, as plain files,
-extracted by the player from their own console. Encrypted packages (.nsp, .xci, .nca, ...) are refused: the port
-decrypts nothing and reads no keys (README.md, Legal). Optional: <dump>\\sysdata\\fonts\\*.bfttf, the console's shared fonts.
-
-Steps (data\\ holds everything made from the dump; it never leaves this PC):
-  check     the tools, the dump's version (SHA-256 of the code modules) and its files
-  romfs     the RomFS folder packed into one image, data\\romfs (its content hash checked against 1.4.3)
-  lift      the game's code translated to C, data\\generated
-  compile   the C compiled and linked: UltraTears.exe (objects in build\\)
-  shaders   every shader of the game found and translated to SPIR-V, data\\shaders
-  textures  the ASTC textures re-encoded for PC graphics cards (BC7 / BC1), data\\textures
-  finish    ultratears.cfg
+From a Git checkout the build goes to dist/, or to --output <folder>. The tracked source files are copied there and
+missing build tools are downloaded from the latest GitHub builder release (on Windows) or resolved from the host
+environment (on Linux). In a builder package setup runs in place.
+usage: python tools/setup.py [--output <build folder>] [--dump <folder with exefs/ and romfs/>] [--cpus N]
 """
 import argparse
 import filecmp
@@ -40,12 +27,19 @@ import version  # noqa: E402
 
 DATA = ROOT / 'data'
 STATE = DATA / 'setup.json'
-# The version the port is made for: TOTK 1.4.3 (facts about the player's files, no game data).
-EXEFS = {
-    'main': 'e84a90d551fed0824b4b74933b9c6d043c458521363a7cea58b2faca1822dc9e',
-    'subsdk0': '767c35bcd7d23e78f9063c69b638290b8b83f91e839beb10799e6576960179b1',
-    'sdk': '1d187f29784cd0af46e9e123fc2a62c77b3b07c5a39c8633d90d6c80de64e4ad',
+EXEFS_VERSIONS = {
+    '1.4.3': {
+        'main': 'e84a90d551fed0824b4b74933b9c6d043c458521363a7cea58b2faca1822dc9e',
+        'subsdk0': '767c35bcd7d23e78f9063c69b638290b8b83f91e839beb10799e6576960179b1',
+        'sdk': '1d187f29784cd0af46e9e123fc2a62c77b3b07c5a39c8633d90d6c80de64e4ad',
+    },
+    '1.4.2': {
+        'main': '62ecbba2a0504dbb8d8f41816db562e69b0dccd19e9040371fe2a1b40efc8093',
+        'subsdk0': '60279c987c7186cbf98151ae414b5ad610feb9bd4f542968bd3f97170d7f1a5e',
+        'sdk': '0b50f0f27792e46d39348e46fa8787e09368d2467e2109a1d474bc9ed31a2cf0',
+    },
 }
+EXEFS = EXEFS_VERSIONS['1.4.3']
 ROMFS_FILES = 304243
 ROMFS_BYTES = 17026725026
 ROMFS_CONTENT = 'b2a2e966a06158e098c03e564f77fd72809bc57275f04eb0725bcde14d522056'
@@ -53,7 +47,7 @@ ENCRYPTED = ('.nsp', '.nsz', '.xci', '.xcz', '.nca', '.ncz')
 GITHUB_RELEASES = 'https://api.github.com/repos/kuraeow/ultratears/releases?per_page=20'
 KEEP = {'game', 'data', 'build', 'userdata', 'diag', 'deps', 'dist', 'dev-local'}
 OUTPUT_OWN = {'setup.bat', 'VERSION.txt', 'THIRD-PARTY-NOTICES.md', 'licenses', 'ultratears.cfg', 'UltraTears.exe',
-              'UltraTears.pdb', 'setup-files.txt'}
+              'UltraTears', 'UltraTears.pdb', 'setup-files.txt'}
 
 
 class Fail(Exception):
@@ -110,15 +104,13 @@ def sync_source(home):
 
 
 def deps_ready(home):
+    if toolchain.IS_LINUX:
+        return toolchain.CLANG64 is not None
     py = home / 'deps/python/python.exe'
     programs = (py, home / 'deps/clang64/bin/clang.exe', home / 'deps/clang64/bin/clang++.exe',
                 home / 'deps/clang64/bin/lld.exe', home / 'deps/clang64/bin/ninja.exe',
                 home / 'deps/shaders/ultrs-shaders.exe')
-    if not all(p.is_file() for p in programs):
-        return False
-    packages = subprocess.run([str(py), '-c', 'import lz4, capstone, unicorn'], stdout=subprocess.DEVNULL,
-                              stderr=subprocess.DEVNULL, env=dict(os.environ, PYTHONNOUSERSITE='1'))
-    return packages.returncode == 0
+    return all(p.is_file() for p in programs)
 
 
 def builder_asset():
@@ -162,6 +154,8 @@ def download(url, path):
 def install_deps(home):
     if deps_ready(home):
         return
+    if toolchain.IS_LINUX:
+        raise Fail('C/C++ compiler not found on Linux: install clang or gcc/g++')
     name, url = builder_asset()
     cache = ROOT / 'dev-local/downloads'
     cache.mkdir(parents=True, exist_ok=True)
@@ -216,16 +210,18 @@ def build_from_checkout(a):
         changed, removed = sync_source(home)
         say(f'UltraTears source -> {home}: {changed} files updated, {removed} removed')
         install_deps(home)
-        local_xlate = ROOT / 'dev-local/build/shaders/ultrs-shaders.exe'
-        target_xlate = home / 'deps/shaders/ultrs-shaders.exe'
-        if local_xlate.is_file() and not filecmp.cmp(local_xlate, target_xlate, shallow=False):
+        xlate_name = f'ultrs-shaders{toolchain.EXE_EXT}'
+        local_xlate = ROOT / f'dev-local/build/shaders/{xlate_name}'
+        target_xlate = home / f'deps/shaders/{xlate_name}'
+        if local_xlate.is_file() and (not target_xlate.is_file() or not filecmp.cmp(local_xlate, target_xlate, shallow=False)):
             target_xlate.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(local_xlate, target_xlate)
             say('  installed the locally built shader translator')
     except Fail as e:
         say(f'\nERROR preparing the build folder: {e}')
         return 1
-    cmd = [str(home / 'deps/python/python.exe'), str(home / 'tools/setup.py'), '--in-place', '--cpus', str(a.cpus),
+    py_exe = sys.executable if toolchain.IS_LINUX else str(home / 'deps/python/python.exe')
+    cmd = [py_exe, str(home / 'tools/setup.py'), '--in-place', '--cpus', str(a.cpus),
            '--dump', str(choose_dump(home, a.dump))]
     if a.only:
         cmd += ['--only', a.only]
@@ -270,21 +266,17 @@ def save_state(state):
 
 # ---------------------------------------------------------------- steps
 def step_check(dump, state):
-    if sys.version_info < (3, 14):
-        raise Fail(f'Python 3.14 or newer is needed (this is {sys.version.split()[0]})')
-    for mod in ('lz4', 'capstone', 'unicorn'):
-        try:
-            __import__(mod)
-        except ImportError:
-            raise Fail(f'the Python package {mod} is missing: python -m pip install lz4 capstone unicorn')
+    if sys.version_info < (3, 10):
+        raise Fail(f'Python 3.10 or newer is needed (this is {sys.version.split()[0]})')
     toolchain.env()
     if toolchain.XLATE is None:
-        raise Fail('the shader translator ultrs-shaders.exe is missing: build it with python tools/build_xlate.py '
-                   '(needs the .NET 10 SDK) or take deps\\shaders from the builder package')
-    if packed(state) and all(ok_module(DATA / 'exefs' / n, h) for n, h in EXEFS.items()):
-        return 'Tears of the Kingdom 1.4.3, already taken in (data\\exefs, data\\romfs): the dump is no longer needed'
+        raise Fail(f'the shader translator ultrs-shaders{toolchain.EXE_EXT} is missing: build it with python tools/build_xlate.py '
+                   '(needs the .NET 10 SDK) or take deps/shaders from the builder package')
+    for ver, hashes in EXEFS_VERSIONS.items():
+        if packed(state) and all(ok_module(DATA / 'exefs' / n, h) for n, h in hashes.items()):
+            return f'Tears of the Kingdom {ver}, already taken in (data/exefs, data/romfs): the dump is no longer needed'
     if not dump.is_dir():
-        raise Fail(f'{dump} does not exist: put your extracted game there (game\\exefs and game\\romfs), '
+        raise Fail(f'{dump} does not exist: put your extracted game there (game/exefs and game/romfs), '
                    'or give its folder with --dump')
     for p in list(dump.iterdir()) + list((dump / 'exefs').glob('*') if (dump / 'exefs').is_dir() else []):
         if p.suffix.lower() in ENCRYPTED:
@@ -293,16 +285,18 @@ def step_check(dump, state):
     exefs, romfs = dump / 'exefs', dump / 'romfs'
     if not exefs.is_dir() or not romfs.is_dir():
         raise Fail(f'{dump} must hold the folders exefs and romfs (extracted, as plain files)')
-    for name, want in EXEFS.items():
+    for name in EXEFS:
         f = exefs / name
         if not f.is_file():
-            raise Fail(f'exefs\\{name} is missing')
-        if sha256(f) != want:
-            raise Fail(f'exefs\\{name} is not the one of Tears of the Kingdom 1.4.3. Extract the ExeFS again with '
-                       'update 1.4.3 applied (the base game 1.0.0 and other updates are not supported)')
+            raise Fail(f'exefs/{name} is missing')
+    actual_hashes = {name: sha256(exefs / name) for name in EXEFS}
+    matched_ver = next((ver for ver, hashes in EXEFS_VERSIONS.items() if actual_hashes == hashes), None)
+    if not matched_ver:
+        raise Fail('exefs/{main,subsdk0,sdk} do not match Tears of the Kingdom 1.4.3 or 1.4.2. '
+                   'Extract the ExeFS again with update 1.4.3 or 1.4.2 applied')
     if not (romfs / 'Pack/ZsDic.pack.zs').is_file():
-        raise Fail(f'{romfs} does not look like the RomFS of Tears of the Kingdom (Pack\\ZsDic.pack.zs is missing)')
-    return 'Tears of the Kingdom 1.4.3 (the code modules match)'
+        raise Fail(f'{romfs} does not look like the RomFS of Tears of the Kingdom (Pack/ZsDic.pack.zs is missing)')
+    return f'Tears of the Kingdom {matched_ver} (the code modules match)'
 
 
 def packed(state):
@@ -334,10 +328,15 @@ def step_lift(dump, state, cpus):
         src = dump / 'exefs' / name
         if src.is_file() and (not (exefs / name).is_file() or (exefs / name).stat().st_size != src.stat().st_size):
             shutil.copyfile(src, exefs / name)
-    stamp = tree_hash(list((ROOT / 'tools/lifter').glob('*.py')) + [ROOT / 'tools/gen_game.py'])
+    lifter_files = (
+        list((ROOT / 'src/horizon2llvm').glob('*.cpp')) +
+        list((ROOT / 'src/horizon2llvm').glob('*.hpp')) +
+        [ROOT / 'tools/gen_game.py']
+    )
+    stamp = tree_hash(lifter_files)
     if state.get('lift') == stamp and (DATA / 'generated/main').is_dir():
         return 'up to date'
-    run([sys.executable, 'tools/gen_game.py', exefs, DATA / 'generated'], 'translating the code')
+    run([sys.executable, 'tools/gen_game.py', exefs, DATA / 'generated'], 'lifting the code to LLVM IR')
     state['lift'] = stamp
     return 'done'
 
@@ -345,7 +344,7 @@ def step_lift(dump, state, cpus):
 def step_compile(dump, state, cpus):
     run([sys.executable, 'tools/build_game.py', '--generated', DATA / 'generated', '--target', 'ultratears', '--cpus', cpus],
         'compiling')
-    return 'UltraTears.exe'
+    return f'UltraTears{toolchain.EXE_EXT}'
 
 
 def step_shaders(dump, state, cpus):
@@ -378,11 +377,11 @@ def step_finish(dump, state, cpus):
         shutil.copytree(fonts, DATA / 'fonts', dirs_exist_ok=True)
     lines.append('fonts=data/fonts')
     (ROOT / 'ultratears.cfg').write_text('\n'.join(lines) + '\n')
-    (ROOT / 'build/UltraTears.exe').unlink(missing_ok=True)   # where builds before 0.1.0 linked it
+    (ROOT / f'build/UltraTears{toolchain.EXE_EXT}').unlink(missing_ok=True)
     if (dump / 'romfs').is_dir():
-        say(f'  The game reads data\\romfs and data\\exefs now: {dump} (16 GB) is no longer needed.')
+        say(f'  The game reads data/romfs and data/exefs now: {dump} (16 GB) is no longer needed.')
         if sys.stdin.isatty() and dump.resolve() == (ROOT / 'game').resolve():
-            answer = input('  Delete game\\exefs and game\\romfs to free 16 GB? [y/N] ').strip().lower()
+            answer = input('  Delete game/exefs and game/romfs to free 16 GB? [y/N] ').strip().lower()
             if answer in ('y', 'yes', 'д', 'да'):
                 for sub in ('exefs', 'romfs'):
                     shutil.rmtree(dump / sub, ignore_errors=True)
@@ -399,7 +398,7 @@ def main():
     ap.add_argument('--output', type=pathlib.Path,
                     help='build folder when run from a Git checkout (default: dist here)')
     ap.add_argument('--dump', type=pathlib.Path,
-                    help='the folder with exefs\\ and romfs\\ (default: game\\ here; remembered for later runs)')
+                    help='the folder with exefs/ and romfs/ (default: game/ here; remembered for later runs)')
     ap.add_argument('--cpus', type=int, default=os.cpu_count() or 4,
                     help='logical CPUs the build may use (default: all; it runs at low priority)')
     ap.add_argument('--only', choices=[s for s, _ in STEPS], help='run one step only')
@@ -437,7 +436,7 @@ def main():
             sys.exit(1)
         save_state(state)
         say(f'  {result or "ok"} ({time.time() - t0:.0f} s)')
-    say(f'\nDone in {(time.time() - t_all) / 60:.0f} min. Start the game: UltraTears.exe in {ROOT}')
+    say(f'\nDone in {(time.time() - t_all) / 60:.0f} min. Start the game: UltraTears{toolchain.EXE_EXT} in {ROOT}')
 
 
 if __name__ == '__main__':

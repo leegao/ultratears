@@ -96,6 +96,24 @@ void *vkb_ring_alloc(VkDeviceSize n, VkDeviceSize align, VkBuffer *buf, VkDevice
     }
 }
 
+// Pre-populates all active shader texture descriptor slots with default/dummy views.
+// Lavapipe / llvmpipe requires this or else it'll crash dereferencing unbound descriptors.
+// On real hardware GPUs, this is skipped by default to avoid redundant descriptor write overhead.
+static int g_descriptor_prefill = -1;
+static inline int need_descriptor_prefill(void) {
+    if (g_descriptor_prefill < 0) {
+        const char *e = getenv("TOTK_VK_DESCRIPTOR_PREFILL");
+        if (e) g_descriptor_prefill = *e != '0';
+        else {
+            // Auto-detect Lavapipe / llvmpipe or software rasterizer
+            g_descriptor_prefill = (vkc.props.deviceType == VK_PHYSICAL_DEVICE_TYPE_CPU) ||
+                                   (strstr(vkc.props.deviceName, "llvmpipe") != NULL) ||
+                                   (strstr(vkc.props.deviceName, "Lavapipe") != NULL);
+        }
+    }
+    return g_descriptor_prefill;
+}
+
 static VkDescriptorSet alloc_set(int compute) {
     slot_res *r = &g_res[vkb_slot()][vkb_worker()];
     VkDescriptorSetLayout layout = vkb_set_layout(compute);
@@ -219,7 +237,10 @@ void vkb_state(uint32_t op, const uint8_t *a) {
 }
 
 // ---------------- texture and sampler pools ----------------
+#ifndef TREG_T_DEFINED
+#define TREG_T_DEFINED
 typedef struct { tex_t t; view_t v; uint8_t has_view, valid; } treg_t;
+#endif
 typedef struct { samp_par p; VkSampler s; uint8_t valid; } sreg_t;
 static treg_t *g_treg;
 static sreg_t *g_sreg;
@@ -260,6 +281,47 @@ void mtl_reg_samp(int id, const samp_par *p) {
     if (old) { mtl_finish(); vk.vkDestroySampler(vkc.device, old, NULL); }   // [temporary] waits for the GPU
 }
 void mtl_set_tex_pool_n(int n) { (void)n; }
+
+/*
+ * Texture & Sampler Registry Binary Serialization (treg.bin / sreg.bin):
+ *
+ * treg.bin:
+ *   [0x00..0x04) uint32_t nt       - Number of texture registry entries
+ *   [0x04..    ) treg_t[nt]        - Array of texture descriptors (tex_t + view_t + valid flag)
+ *
+ * sreg.bin:
+ *   [0x00..0x04) uint32_t ns       - Number of sampler registry entries
+ *   [0x04..    ) sreg_t[ns]        - Array of sampler parameter entries (samp_par + VkSampler + valid flag)
+ *   Note: On load, sreg_t[i].s is reset to VK_NULL_HANDLE so VkSampler handles are lazily
+ *   recreated against the replay process's active VkDevice rather than dereferencing stale handles.
+ */
+void vkb_registries_dump(FILE *ft, FILE *fs) {
+
+    vkb_rw_read(&g_reg_mu, LK_TEXREG);
+    uint32_t nt = (uint32_t)g_ntreg, ns = (uint32_t)g_nsreg;
+    fwrite(&nt, sizeof nt, 1, ft);
+    if (nt) fwrite(g_treg, sizeof *g_treg, nt, ft);
+    fwrite(&ns, sizeof ns, 1, fs);
+    if (ns) fwrite(g_sreg, sizeof *g_sreg, ns, fs);
+    vkb_rw_read_end(&g_reg_mu);
+}
+
+void vkb_registries_load(FILE *ft, FILE *fs) {
+    vkb_rw_write(&g_reg_mu, LK_TEXREG);
+    uint32_t nt = 0, ns = 0;
+    if (ft && fread(&nt, sizeof nt, 1, ft) == 1 && nt) {
+        g_treg = realloc(g_treg, sizeof *g_treg * nt);
+        g_ntreg = (int)nt;
+        fread(g_treg, sizeof *g_treg, nt, ft);
+    }
+    if (fs && fread(&ns, sizeof ns, 1, fs) == 1 && ns) {
+        g_sreg = realloc(g_sreg, sizeof *g_sreg * ns);
+        g_nsreg = (int)ns;
+        fread(g_sreg, sizeof *g_sreg, ns, fs);
+        for (uint32_t i = 0; i < ns; i++) g_sreg[i].s = VK_NULL_HANDLE;
+    }
+    vkb_rw_write_end(&g_reg_mu);
+}
 
 static VkSamplerAddressMode wrap(uint8_t w) {
     switch (w) {
@@ -936,6 +998,20 @@ static VkDescriptorSet resolve_set(writes_t *W, int compute) {
         if (B->sets[compute][k].rec != g_sub) { at = k; break; }
     }
     VkDescriptorSet set = alloc_set(compute);
+    if (need_descriptor_prefill()) {
+        VkDescriptorImageInfo dinfo = {sampler(-1), dummy_view(VK_IMAGE_VIEW_TYPE_2D), VK_IMAGE_LAYOUT_GENERAL};
+        VkWriteDescriptorSet dw[48];
+        int ndw = 0;
+        for (int st = 0; st < (compute ? 1 : 2); st++) {
+            uint32_t base = (uint32_t)st * VKB_STAGE_BINDINGS;
+            for (uint32_t i = 0; i < VKB_NTEX; i++) {
+                dw[ndw++] = (VkWriteDescriptorSet){VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET, .dstSet = set,
+                    .dstBinding = base + VKB_B_TEX + i, .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .pImageInfo = &dinfo};
+            }
+        }
+        vk.vkUpdateDescriptorSets(vkc.device, (uint32_t)ndw, dw, 0, NULL);
+    }
     for (int i = 0; i < W->n; i++) W->w[i].dstSet = set;
     vk.vkUpdateDescriptorSets(vkc.device, (uint32_t)W->n, W->w, 0, NULL);
     B->sets[compute][at].rec = g_sub; B->sets[compute][at].h1 = h1; B->sets[compute][at].h2 = h2; B->sets[compute][at].set = set;
@@ -1123,8 +1199,8 @@ static void set_dynamic_state(VkCommandBuffer cb, int ncolor, VkExtent2D ext, Vk
         if (dyn(D_WMASK, wm, sizeof wm[0] * (size_t)ncolor)) vk.vkCmdSetColorWriteMaskEXT(cb, 0, (uint32_t)ncolor, wm);
     }
     uint32_t lop = S.has_color ? S.color.logic_op : 3;
-    DYN(D_LOPEN, VkBool32, lop != 3, vk.vkCmdSetLogicOpEnableEXT(cb, v_));
-    DYN(D_LOP, VkLogicOp, (VkLogicOp)lop, vk.vkCmdSetLogicOpEXT(cb, v_));
+    if (vk.vkCmdSetLogicOpEnableEXT) { DYN(D_LOPEN, VkBool32, lop != 3, vk.vkCmdSetLogicOpEnableEXT(cb, v_)); }
+    if (vk.vkCmdSetLogicOpEXT) { DYN(D_LOP, VkLogicOp, (VkLogicOp)lop, vk.vkCmdSetLogicOpEXT(cb, v_)); }
     if (dyn(D_BCONST, S.blend_color, sizeof S.blend_color)) vk.vkCmdSetBlendConstants(cb, S.blend_color);
 }
 
@@ -1242,7 +1318,7 @@ static void set_vertex_input(VkCommandBuffer cb, uint32_t int_inputs) {
         VkDeviceSize size = S.vbuf[s].size;
         if (S.vbuf[s].address && size && vkb_gpu_addr(S.vbuf[s].address, size, &buf, &off)) {
             VkDeviceSize key[3] = {(VkDeviceSize)(uintptr_t)buf, off, size};
-            if (dyn(D_VB0 + (int)s, key, sizeof key)) vk.vkCmdBindVertexBuffers2(cb, s, 1, &buf, &off, &size, NULL);
+            VkDeviceSize strd = S.vstream[s].stride; if (dyn(D_VB0 + (int)s, key, sizeof key)) vk.vkCmdBindVertexBuffers2(cb, s, 1, &buf, &off, &size, &strd);
         }
         else {
             if (S.vbuf[s].address) {   // [temporary] not in an imported pool (a virtual pool: sparse binding later): zeros
@@ -1252,7 +1328,7 @@ static void set_vertex_input(VkCommandBuffer cb, uint32_t int_inputs) {
                                       (unsigned long long)S.vbuf[s].address, (unsigned long long)S.vbuf[s].size, s);
             }
             VkDeviceSize z = 0, zs = 65536, key[3] = {(VkDeviceSize)(uintptr_t)g_zero, 0, 65536};
-            if (dyn(D_VB0 + (int)s, key, sizeof key)) vk.vkCmdBindVertexBuffers2(cb, s, 1, &g_zero, &z, &zs, NULL);
+            VkDeviceSize strd = S.vstream[s].stride; if (dyn(D_VB0 + (int)s, key, sizeof key)) vk.vkCmdBindVertexBuffers2(cb, s, 1, &g_zero, &z, &zs, &strd);
         }
     }
     struct { uint32_t nb, na; VkVertexInputBindingDescription2EXT b[16]; VkVertexInputAttributeDescription2EXT a[16]; } vi;
@@ -1673,7 +1749,7 @@ void vkb_draw(const uint8_t *a, int indexed) {
     if (S.has_ms && S.ms.enable && S.ms.samples > 1) vkb_audit(A_MULTISAMPLE, fs ? fs->key : vs->key);
     if (vkb_render_suppressed()) vkb_audit(A_RENDER_DISABLED, fs ? fs->key : vs->key);
     VkShaderEXT objs[5] = {vobj, fs ? fs->obj : VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE, VK_NULL_HANDLE};
-    if (dyn(D_SHADERS, objs, sizeof objs)) vk.vkCmdBindShadersEXT(cb, 5, stages, objs);
+    if (!vkc.has_shader_object || dyn(D_SHADERS, objs, sizeof objs)) vk.vkCmdBindShadersEXT(cb, 5, stages, objs);
     set_dynamic_state(cb, vkb_rt_count(), vkb_rt_extent(), topo);
     if (vkc.has_feedback_loop) {   // required state with shader objects once the feature is enabled
         VkImageAspectFlags loop = (g_fb & 0xFF ? VK_IMAGE_ASPECT_COLOR_BIT : 0) | (g_fb & VKB_FB_DEPTH ? g_fb_rt[8]->aspect : 0);

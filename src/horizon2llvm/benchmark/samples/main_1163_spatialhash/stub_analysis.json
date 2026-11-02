@@ -1,0 +1,44 @@
+{
+  "sample_id": "main_1163_spatialhash",
+  "total_arm64_insns": 1122,
+  "total_common_path_insns": 45,
+  "total_longest_path_insns": 500,
+  "functions": [
+    {
+      "name": "f_8021c31d4",
+      "entry_pc": 34395140564,
+      "static_insns": 1122,
+      "basic_blocks": 345,
+      "back_edges": 21,
+      "common_path_insns": 45,
+      "longest_path_insns": 500
+    }
+  ],
+  "num_branch_sensitive": 1,
+  "num_pointer_alloc": 5,
+  "num_memory_copy": 0,
+  "num_constant_zero": 15,
+  "external_stubs": [
+    "f_8006ad38c",
+    "f_8006aec40",
+    "f_8021a0e4c",
+    "f_8021a5128",
+    "f_802ba39a0",
+    "f_802ba39b0",
+    "f_8021a52d0",
+    "f_8021b69a4",
+    "f_8021ac220",
+    "f_8021ac1cc",
+    "f_8021a1648",
+    "f_8021a53d8",
+    "f_8021a5354",
+    "f_8021a4594",
+    "f_8021a1390",
+    "f_8021a1408",
+    "f_8021a1318",
+    "f_8021968bc",
+    "f_80219699c",
+    "f_802196a0c",
+    "f_802196a7c"
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "sample_id": "main_163_actor",
+  "total_arm64_insns": 974,
+  "total_common_path_insns": 63,
+  "total_longest_path_insns": 1832,
+  "functions": [
+    {
+      "name": "f_80029e418",
+      "entry_pc": 34362483736,
+      "static_insns": 974,
+      "basic_blocks": 177,
+      "back_edges": 25,
+      "common_path_insns": 63,
+      "longest_path_insns": 1832
+    }
+  ],
+  "num_branch_sensitive": 4,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 24,
+  "external_stubs": [
+    "f_800079d20",
+    "f_8001a1590",
+    "f_80029f350",
+    "f_800315c14",
+    "f_80029f86c",
+    "f_8002a1318",
+    "f_8002a58d8",
+    "f_8002a7968",
+    "f_802ba39a0",
+    "f_802ba39b0",
+    "f_801d28ec0",
+    "f_801d28f28",
+    "f_801d28f90",
+    "f_8002a77e8",
+    "f_801d291c0",
+    "f_801d29228",
+    "f_801d29290",
+    "f_801d29308",
+    "f_802ba41d0",
+    "f_801d29374",
+    "f_801d2a318",
+    "f_801d293c8",
+    "f_801d2a554",
+    "f_801d2a5c8",
+    "f_801d28d50",
+    "f_801d290a0",
+    "f_800193210",
+    "f_8009c79d0"
+  ]
+}

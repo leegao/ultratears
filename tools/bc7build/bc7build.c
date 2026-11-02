@@ -28,6 +28,10 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <zstd.h>
+#ifndef _WIN32
+#define _fseeki64(f, off, w) fseeko((f), (off_t)(off), (w))
+#define _ftelli64(f) ((int64_t)ftello(f))
+#endif
 
 #include "../../src/gfx/tex/astc.h"
 #include "../../src/gfx/tex/bc7.h"

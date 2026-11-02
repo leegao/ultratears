@@ -1,0 +1,33 @@
+{
+  "sample_id": "main_435_dispatch",
+  "total_arm64_insns": 4049,
+  "total_common_path_insns": 5776,
+  "total_longest_path_insns": 7264,
+  "functions": [
+    {
+      "name": "f_8007821c0",
+      "entry_pc": 34367611328,
+      "static_insns": 4049,
+      "basic_blocks": 243,
+      "back_edges": 39,
+      "common_path_insns": 5776,
+      "longest_path_insns": 7264
+    }
+  ],
+  "num_branch_sensitive": 1,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 9,
+  "external_stubs": [
+    "f_802ba4180",
+    "f_8000113c0",
+    "f_800125710",
+    "f_802ba41d0",
+    "f_8003f99f8",
+    "f_800393950",
+    "f_802ba39a0",
+    "f_800787a5c",
+    "f_802ba39b0",
+    "f_800787af0"
+  ]
+}

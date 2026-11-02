@@ -1,0 +1,28 @@
+{
+  "sample_id": "main_154_hashmap",
+  "total_arm64_insns": 1522,
+  "total_common_path_insns": 139,
+  "total_longest_path_insns": 1500,
+  "functions": [
+    {
+      "name": "f_8002688c8",
+      "entry_pc": 34362263752,
+      "static_insns": 1522,
+      "basic_blocks": 167,
+      "back_edges": 4,
+      "common_path_insns": 139,
+      "longest_path_insns": 1500
+    }
+  ],
+  "num_branch_sensitive": 1,
+  "num_pointer_alloc": 0,
+  "num_memory_copy": 0,
+  "num_constant_zero": 4,
+  "external_stubs": [
+    "f_800099860",
+    "f_802ba39a0",
+    "f_802ba39b0",
+    "f_800605f9c",
+    "f_8023974b0"
+  ]
+}

@@ -94,6 +94,11 @@ int window_init(void) {
     pad_lock = SDL_CreateMutex();
     window = SDL_CreateWindow("UltraTears", 1280, 720, SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY);
     if (!window) { fprintf(stderr, "[totk] window: %s\n", SDL_GetError()); return 0; }
+    if (getenv("TOTK_SDL_DEBUG") || getenv("TOTK_GFX_DEBUG")) {
+        int pix_w = 0, pix_h = 0;
+        SDL_GetWindowSizeInPixels(window, &pix_w, &pix_h);
+        fprintf(stderr, "[totk-sdl] window created: pixels %dx%d\n", pix_w, pix_h);
+    }
     if (!vkp_init(window))
         runtime_fail("Vulkan initialization failed (Vulkan 1.3 with VK_EXT_shader_object is required)");
     return 1;

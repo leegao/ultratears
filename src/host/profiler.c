@@ -1,3 +1,4 @@
+#ifdef _WIN32
 // Sampling CPU profiler for development (TOTK_PROF=<start s>:<seconds>[:<report path>]). A host thread wakes about
 // 1000 times a second, suspends every other thread of the process in turn, reads its instruction pointer and resumes
 // it. At the end the samples are mapped to functions through the PDB (dbghelp) and a report is written:
@@ -312,3 +313,33 @@ void runtime_profiler_start(void) {
     if (h) SetThreadPriority(h, THREAD_PRIORITY_HIGHEST);
     fprintf(stderr, "[prof] armed: %.0f s from now, for %.0f s, report %s\n", start_s, duration_s, out_path);
 }
+#else
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "host.h"
+
+const char *rt_host_fn_name(uint64_t pc, uint64_t *offset);
+
+uint64_t runtime_symbolize(uint64_t rip, char *out, size_t n) {
+    uint64_t off = 0;
+    const char *s = rt_host_fn_name(rip, &off);
+    if (!s) s = plat_symbol(rip, &off);
+    if (!s) {
+        snprintf(out, n, "[%#llx]", (unsigned long long)rip);
+        return rip;
+    }
+    uint64_t guest = 0, goff = 0;
+    const char *g = NULL;
+    if (sscanf(s, "f_%llx", (unsigned long long *)&guest) == 1) g = loader_symbol_at(guest, &goff);
+    if (g && !goff) snprintf(out, n, "%s  (%s)", s, g);
+    else if (g) snprintf(out, n, "%s  (%s+%#llx)", s, g, (unsigned long long)goff);
+    else snprintf(out, n, "%s", s);
+    return rip - off;
+}
+
+void runtime_profiler_start(void) {
+    const char *e = getenv("TOTK_PROF");
+    if (e && *e) fprintf(stderr, "[prof] TOTK_PROF: use Linux perf (`perf record -g`) on Linux builds\n");
+}
+#endif

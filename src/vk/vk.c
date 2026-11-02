@@ -1,10 +1,15 @@
 // The shared Vulkan instance and device (see vk.h).
 #include "vk.h"
+#include "shader_object_emu.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <pthread.h>
+#ifdef _WIN32
 #include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,9 +22,45 @@ static pthread_mutex_t queue_mu = PTHREAD_MUTEX_INITIALIZER;
 void vk_queue_lock(void) { pthread_mutex_lock(&queue_mu); }
 void vk_queue_unlock(void) { pthread_mutex_unlock(&queue_mu); }
 
+const char *vk_result_str(VkResult r) {
+    switch ((int)r) {
+    case VK_SUCCESS: return "VK_SUCCESS";
+    case VK_NOT_READY: return "VK_NOT_READY";
+    case VK_TIMEOUT: return "VK_TIMEOUT";
+    case VK_EVENT_SET: return "VK_EVENT_SET";
+    case VK_EVENT_RESET: return "VK_EVENT_RESET";
+    case VK_INCOMPLETE: return "VK_INCOMPLETE";
+    case VK_ERROR_OUT_OF_HOST_MEMORY: return "VK_ERROR_OUT_OF_HOST_MEMORY";
+    case VK_ERROR_OUT_OF_DEVICE_MEMORY: return "VK_ERROR_OUT_OF_DEVICE_MEMORY";
+    case VK_ERROR_INITIALIZATION_FAILED: return "VK_ERROR_INITIALIZATION_FAILED";
+    case VK_ERROR_DEVICE_LOST: return "VK_ERROR_DEVICE_LOST";
+    case VK_ERROR_MEMORY_MAP_FAILED: return "VK_ERROR_MEMORY_MAP_FAILED";
+    case VK_ERROR_LAYER_NOT_PRESENT: return "VK_ERROR_LAYER_NOT_PRESENT";
+    case VK_ERROR_EXTENSION_NOT_PRESENT: return "VK_ERROR_EXTENSION_NOT_PRESENT";
+    case VK_ERROR_FEATURE_NOT_PRESENT: return "VK_ERROR_FEATURE_NOT_PRESENT";
+    case VK_ERROR_INCOMPATIBLE_DRIVER: return "VK_ERROR_INCOMPATIBLE_DRIVER";
+    case VK_ERROR_TOO_MANY_OBJECTS: return "VK_ERROR_TOO_MANY_OBJECTS";
+    case VK_ERROR_FORMAT_NOT_SUPPORTED: return "VK_ERROR_FORMAT_NOT_SUPPORTED";
+    case VK_ERROR_FRAGMENTED_POOL: return "VK_ERROR_FRAGMENTED_POOL";
+    case VK_ERROR_UNKNOWN: return "VK_ERROR_UNKNOWN";
+    case VK_ERROR_OUT_OF_POOL_MEMORY: return "VK_ERROR_OUT_OF_POOL_MEMORY";
+    case VK_ERROR_INVALID_EXTERNAL_HANDLE: return "VK_ERROR_INVALID_EXTERNAL_HANDLE";
+    case VK_ERROR_FRAGMENTATION: return "VK_ERROR_FRAGMENTATION";
+    case VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS: return "VK_ERROR_INVALID_OPAQUE_CAPTURE_ADDRESS";
+    case VK_ERROR_SURFACE_LOST_KHR: return "VK_ERROR_SURFACE_LOST_KHR";
+    case VK_ERROR_NATIVE_WINDOW_IN_USE_KHR: return "VK_ERROR_NATIVE_WINDOW_IN_USE_KHR";
+    case VK_SUBOPTIMAL_KHR: return "VK_SUBOPTIMAL_KHR";
+    case VK_ERROR_OUT_OF_DATE_KHR: return "VK_ERROR_OUT_OF_DATE_KHR";
+    case VK_ERROR_INCOMPATIBLE_DISPLAY_KHR: return "VK_ERROR_INCOMPATIBLE_DISPLAY_KHR";
+    case VK_ERROR_VALIDATION_FAILED_EXT: return "VK_ERROR_VALIDATION_FAILED_EXT";
+    case VK_ERROR_INVALID_SHADER_NV: return "VK_ERROR_INVALID_SHADER_NV";
+    default: return "VK_UNKNOWN_ERROR";
+    }
+}
+
 int vk_check(VkResult r, const char *what) {
     if (r == VK_SUCCESS) return 1;
-    LOG("%s failed (%d)", what, (int)r);
+    LOG("%s failed: %s (%d)", what, vk_result_str(r), (int)r);
     return 0;
 }
 
@@ -38,15 +79,38 @@ static int create_instance(SDL_Window *window) {
     PFN_vkGetInstanceProcAddr gipa = NULL;
     if (window) gipa = (PFN_vkGetInstanceProcAddr)SDL_Vulkan_GetVkGetInstanceProcAddr();
     else {   // no window (TOTK_HEADLESS): SDL's video subsystem is not up, so the loader is loaded here
+#ifdef _WIN32
         HMODULE m = LoadLibraryA("vulkan-1.dll");
         if (m) gipa = (PFN_vkGetInstanceProcAddr)(void *)GetProcAddress(m, "vkGetInstanceProcAddr");
+#else
+        void *m = dlopen("libvulkan.so.1", RTLD_NOW | RTLD_LOCAL);
+        if (!m) m = dlopen("libvulkan.so", RTLD_NOW | RTLD_LOCAL);
+        if (m) gipa = (PFN_vkGetInstanceProcAddr)dlsym(m, "vkGetInstanceProcAddr");
+#endif
     }
-    if (!gipa) { LOG("no Vulkan loader (vulkan-1.dll)"); return 0; }
+    if (!gipa) { LOG("no Vulkan loader"); return 0; }
 #define LOAD(f) vk.f = (PFN_##f)gipa(NULL, #f);
     VK_FN_GLOBAL(LOAD)
 #undef LOAD
     Uint32 next = 0;
     const char *const *exts = window ? SDL_Vulkan_GetInstanceExtensions(&next) : NULL;
+    // WSI Surface Extension Guarantee: explicitly add VK_KHR_surface and platform surface extensions
+    const char *extra_exts[8];
+    uint32_t extra_n = 0;
+    if (window) {
+        extra_exts[extra_n++] = VK_KHR_SURFACE_EXTENSION_NAME;
+        extra_exts[extra_n++] = VK_KHR_XLIB_SURFACE_EXTENSION_NAME;
+        extra_exts[extra_n++] = VK_KHR_XCB_SURFACE_EXTENSION_NAME;
+        extra_exts[extra_n++] = VK_KHR_WAYLAND_SURFACE_EXTENSION_NAME;
+    }
+    const char *merged_exts[64];
+    uint32_t merged_n = 0;
+    for (uint32_t i = 0; i < next && merged_n < 64; i++) merged_exts[merged_n++] = exts[i];
+    for (uint32_t i = 0; i < extra_n && merged_n < 64; i++) {
+        int already = 0;
+        for (uint32_t j = 0; j < merged_n; j++) if (!strcmp(merged_exts[j], extra_exts[i])) already = 1;
+        if (!already) merged_exts[merged_n++] = extra_exts[i];
+    }
     // TOTK_VK_VALIDATION=1: the Khronos validation layer (Vulkan SDK), for development
     const char *layer = "VK_LAYER_KHRONOS_validation";
     const char *v = getenv("TOTK_VK_VALIDATION");
@@ -55,13 +119,17 @@ static int create_instance(SDL_Window *window) {
     VkApplicationInfo app = {VK_STRUCTURE_TYPE_APPLICATION_INFO, .pApplicationName = "UltraTears",
                              .apiVersion = VK_API_VERSION_1_3};
     VkInstanceCreateInfo ci = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO, .pApplicationInfo = &app,
-                               .enabledExtensionCount = next, .ppEnabledExtensionNames = exts,
+                               .enabledExtensionCount = merged_n, .ppEnabledExtensionNames = merged_exts,
                                .enabledLayerCount = validate ? 1u : 0u, .ppEnabledLayerNames = &layer};
     if (!vk_check(vk.vkCreateInstance(&ci, NULL, &vkc.instance), "vkCreateInstance")) return 0;
 #define LOAD(f) vk.f = (PFN_##f)gipa(vkc.instance, #f);
     VK_FN_INSTANCE(LOAD)
 #undef LOAD
     if (validate) LOG("validation layer on");
+    if (getenv("TOTK_VK_DEBUG") || getenv("TOTK_GFX_DEBUG")) {
+        LOG("instance extensions enabled (%u):", merged_n);
+        for (uint32_t i = 0; i < merged_n; i++) LOG("  [%u] %s", i, merged_exts[i]);
+    }
     if (window && !SDL_Vulkan_CreateSurface(window, vkc.instance, NULL, &vkc.surface)) {
         LOG("window surface: %s", SDL_GetError());
         vkc.surface = VK_NULL_HANDLE;
@@ -182,6 +250,10 @@ static int create_device(void) {
         {VK_EXT_ATTACHMENT_FEEDBACK_LOOP_DYNAMIC_STATE_EXTENSION_NAME, &ffld, &has_fld},
         // ...and a draw that samples a target earlier draws of the pass wrote waits for them inside the pass
         {VK_KHR_DYNAMIC_RENDERING_LOCAL_READ_EXTENSION_NAME, &flr, &has_lr},
+        // Fallback KHR extensions for Vulkan 1.3 core features (activated automatically when apiVersion >= 1.3)
+        {VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME, NULL, NULL},
+        {VK_KHR_SYNCHRONIZATION_2_EXTENSION_NAME, NULL, NULL},
+        {VK_KHR_TIMELINE_SEMAPHORE_EXTENSION_NAME, NULL, NULL},
         // development (TOTK_VK_CHECKPOINTS=1): the markers a lost device reached
         {VK_NV_DEVICE_DIAGNOSTIC_CHECKPOINTS_EXTENSION_NAME, NULL, &vkc.has_checkpoints},
     };
@@ -193,12 +265,25 @@ static int create_device(void) {
         if (want[i].flag) *want[i].flag = 1;
         if (want[i].features) { *tail = want[i].features; tail = (void **)&((VkBaseOutStructure *)want[i].features)->pNext; }
     }
+    // Explicitly NULL-terminate the feature pNext chain
+    *tail = NULL;
     free(ex.e);
     vk.vkGetPhysicalDeviceFeatures2(vkc.gpu, &f2);
+    // Automatically activate Vulkan 1.3 core features when API version >= 1.3
+    if (vkc.props.apiVersion >= VK_API_VERSION_1_3) {
+        f12.timelineSemaphore = VK_TRUE;
+        f13.dynamicRendering = VK_TRUE;
+        f13.synchronization2 = VK_TRUE;
+    }
     vkc.has_shader_object = vkc.has_shader_object && fso.shaderObject;
     if (!vkc.has_shader_object) {
-        LOG("VK_EXT_shader_object is required but is not supported by this GPU or driver");
-        return 0;
+        LOG("VK_EXT_shader_object not supported natively; using built-in VkPipeline shader-object emulation");
+    }
+    vkc.has_interlock = vkc.has_interlock && (ffsi.fragmentShaderPixelInterlock || ffsi.fragmentShaderSampleInterlock);
+    if (!vkc.has_interlock) {
+        ffsi.fragmentShaderPixelInterlock = VK_FALSE;
+        ffsi.fragmentShaderSampleInterlock = VK_FALSE;
+        ffsi.fragmentShaderShadingRateInterlock = VK_FALSE;
     }
     vkc.has_feedback_loop = has_fl && has_fld && ffl.attachmentFeedbackLoopLayout && ffld.attachmentFeedbackLoopDynamicState;
     if (!vkc.has_feedback_loop) LOG("no attachment feedback loops: textures that are attachments of their pass read empty");
@@ -225,11 +310,16 @@ static int create_device(void) {
 #define LOAD(f) vk.f = (PFN_##f)vk.vkGetDeviceProcAddr(vkc.device, #f);
     VK_FN_DEVICE(LOAD)
 #undef LOAD
+    if (!vkc.has_shader_object) init_shader_object_emu();
     vk.vkGetDeviceQueue(vkc.device, vkc.family, 0, &vkc.queue);
     LOG("device: %u extensions; descriptor buffer %d, pipeline library %d, dynamic state 3 %d, vertex input %d, "
         "timeline semaphores %d, host pointer alignment %#llx", nnames, vkc.has_descriptor_buffer, vkc.has_gpl,
         vkc.has_eds3, vkc.has_vertex_input_ds, f12.timelineSemaphore, (unsigned long long)vkc.host_pointer_alignment);
-    if (!f12.timelineSemaphore || !f13.dynamicRendering || !f13.synchronization2) { LOG("GPU lacks Vulkan 1.3 core features"); return 0; }
+    LOG("core features: timelineSemaphore=%d dynamicRendering=%d synchronization2=%d", (int)f12.timelineSemaphore, (int)f13.dynamicRendering, (int)f13.synchronization2);
+    if (!f12.timelineSemaphore || !f13.dynamicRendering || !f13.synchronization2) {
+        LOG("GPU lacks Vulkan 1.3 core features (hint: RADV_PERFTEST=shader_object may enable VK_EXT_shader_object on RADV)");
+        return 0;
+    }
     return 1;
 }
 
@@ -241,3 +331,6 @@ int vk_init(SDL_Window *window) {
     pthread_mutex_unlock(&mu);
     return state == 1;
 }
+
+
+

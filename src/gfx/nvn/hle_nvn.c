@@ -1261,6 +1261,38 @@ static void pin_sweep(uint64_t now, int force) {
     pin_gone_flush();
 }
 size_t dm_nvn_pin_count(void) { pthread_mutex_lock(&g_pin_mu); size_t n = g_pin_n; pthread_mutex_unlock(&g_pin_mu); return n; }
+
+/*
+ * Pinned Texture Table Binary Serialization (pinned_textures.bin):
+ * When nvnCommandBufferSetRenderTargets records OP_SET_RT, it calls tex_pin() to clone the
+ * guest NVNtexture into a host-heap pin_t entry in g_pin_tab, storing the raw host pointer
+ * (&g_pin_tab[i]->t) directly inside the recorded command stream.
+ * To replay those command streams in a separate standalone process, we serialize every active
+ * entry in g_pin_tab as:
+ *   [0x00..0x04) uint32_t count
+ *   Followed by `count` records of:
+ *     - uint64_t old_host_ptr  (original &g_pin_tab[i]->t address in UltraTears)
+ *     - tex_t    tex_snapshot  (the pinned texture metadata/serial)
+ * During replay load, OP_SET_RT color/depth pointers matching `old_host_ptr` are remapped
+ * to the newly allocated tex_t instances.
+ */
+void hle_nvn_pin_dump(FILE *f) {
+
+    pthread_mutex_lock(&g_pin_mu);
+    uint32_t count = 0;
+    for (size_t i = 0; i < g_pin_cap; i++) {
+        if (g_pin_tab[i]) count++;
+    }
+    fwrite(&count, sizeof count, 1, f);
+    for (size_t i = 0; i < g_pin_cap; i++) {
+        if (g_pin_tab[i]) {
+            uint64_t ptr = (uint64_t)(uintptr_t)&g_pin_tab[i]->t;
+            fwrite(&ptr, sizeof ptr, 1, f);
+            fwrite(&g_pin_tab[i]->t, sizeof(tex_t), 1, f);
+        }
+    }
+    pthread_mutex_unlock(&g_pin_mu);
+}
 NVN(nvnCommandBufferSetRenderTargets, void, NVNcommandBuffer *c, int n, const NVNtexture *const *ct, const NVNtextureView *const *cv,
     const NVNtexture *dt, const NVNtextureView *dv) {
     if (n < 0 || n > 8) { LOG("[error] SetRenderTargets count %d", n); n = n < 0 ? 0 : 8; }
@@ -1898,6 +1930,18 @@ static int async_replay(void) {
 }
 static void submit_exec(int n, const uint64_t *h, void *ucap);
 static void present_exec(win_t *o, int idx, double period, const int crop[4], uint64_t frame);
+
+extern int mtl_sub_open(void);
+extern void mtl_sub_flush_open(void);
+
+int nvn_next_is_present(void) {
+    int yes = 0;
+    pthread_mutex_lock(&g_xq_mu);
+    if (g_xq_done + 1 < g_xq_in && g_xq[(g_xq_done + 1) % XQ].kind == XJ_PRESENT) yes = 1;
+    pthread_mutex_unlock(&g_xq_mu);
+    return yes;
+}
+
 static void *x_thread(void *unused) {
     (void)unused; pthread_setname_np("totk-translate");
     { void plat_thread_boost(void); plat_thread_boost(); }   // [Windows port] the frame waits for this thread
@@ -1907,16 +1951,20 @@ static void *x_thread(void *unused) {
         xjob j = g_xq[g_xq_done % XQ];
         pthread_mutex_unlock(&g_xq_mu);
         if (j.kind == XJ_SUBMIT) { submit_exec(j.n, j.h, j.ucap); free(j.h); }
-        else if (j.kind == XJ_TEXREL) { void live_del_x(const tex_t *o); live_del_x(&j.tex); mtl_tex_release(&j.tex); }
+        else if (j.kind == XJ_TEXREL) { mtl_sub_flush_open(); void live_del_x(const tex_t *o); live_del_x(&j.tex); mtl_tex_release(&j.tex); }
         else {
             // Real-time like the game's render thread that used to replay (set at acquire): otherwise the game's ~50
             // worker threads preempt the replay (measured: replay 6.6 -> 13 ms, 10 fps). Half the period is declared.
             static uint64_t rt; uint64_t per = (uint64_t)(j.period * 1e9);
             if (per && rt != per) { rt = per; void set_time_constraint_comp_x(uint64_t, uint64_t); set_time_constraint_comp_x(per, per / 2); }
             present_exec(j.win, j.idx, j.period, j.crop, j.frame);
+            mtl_sub_flush_open();
         }
         pthread_mutex_lock(&g_xq_mu);
-        if (j.kind == XJ_SUBMIT) { g_xsub_fence[j.sub % XF] = mtl_last_fence(); g_xsub_done = j.sub; }
+        if (j.kind == XJ_SUBMIT) {
+            g_xsub_fence[j.sub % XF] = mtl_sub_open() ? mtl_last_fence() + 1 : mtl_last_fence();
+            g_xsub_done = j.sub;
+        }
         g_xq_done++;
         pthread_cond_broadcast(&g_xq_cv);
         pthread_mutex_unlock(&g_xq_mu);
@@ -2058,13 +2106,18 @@ static void submit_exec(int n, const uint64_t *h, void *ucap) {
     { void vkb_seq_set(uint64_t seq); vkb_seq_set(0); }   // [Windows port] positions in this submission (captured uniforms)
     mtl_sub_snapshot_ubos_cap((const uint64_t *)h, n, ucap);   // TOTK: uniforms as of the submit call (ucap: bytes captured there)
     mtl_sub_index((const uint64_t *)h, n);
+    {
+        int vkb_capture_wanted(void);
+        void vkb_capture_frame(int n, const uint64_t *h, void *ucap);
+        if (vkb_capture_wanted()) vkb_capture_frame(n, (const uint64_t *)h, ucap);
+    }
     {   // [Windows port] several recording threads (src/gfx/backend_vk.c vkb_mt_submit), else this one
         int vkb_mt_on(void); void vkb_mt_submit(const uint64_t *h, int n);
         if (vkb_mt_on()) vkb_mt_submit((const uint64_t *)h, n);
         else {
             for (int i = 0; i < n; i++) { mtl_exec_rest((const uint64_t *)h + i + 1, n - i - 1); mtl_exec((const uint8_t *)h[i]); }
             mtl_exec_rest(NULL, 0);
-            mtl_sub_commit();
+            if (!nvn_next_is_present()) mtl_sub_commit();
         }
     }
     atomic_fetch_sub(&dm_submit_busy, 1);
@@ -2201,23 +2254,29 @@ void nvn_set_framewait(int on) {
    its tick; it keeps stepping its time by the interval it chose, so its speed stays right (a slow frame slows the game
    down instead). A request for more than the maximum at that call is lowered together with the controller's current
    interval and x21, so the time step matches what is presented. */
-/* The game's dynamic scene resolution (tools/lifter/patches.py, drs_off): off unless TOTK_DRS=1. */
+/* The game's dynamic scene resolution (src/horizon2llvm/patches.py, drs_off): off unless TOTK_DRS=1. */
 int totk_drs_enabled(void) {
     static int on = -1;
     if (on < 0) { const char *e = getenv("TOTK_DRS"); on = e && atoi(e) > 0; LOG("[nvn] dynamic resolution %s (TOTK_DRS)", on ? "on" : "off: fixed scene size"); }
     return on;
 }
 
-#define FRAME_CONTROLLER_LR 0x8002db2ecull
+#define FRAME_CONTROLLER_LR_143 0x8002db2ecull /* TOTK 1.4.3: main+0x2db174 (+0x178) */
+#define FRAME_CONTROLLER_LR_142 0x8002d4fc8ull /* TOTK 1.4.2: main+0x2d4e50 (+0x178) */
+#define FRAME_CONTROLLER_LR     FRAME_CONTROLLER_LR_143
 static uint64_t g_frame_ctl;   // the controller's state (guest address)
 uint64_t nvn_frame_ctl(void) { return g_frame_ctl; }
 NVN(nvnWindowSetPresentInterval, void, NVNwindow *w, int v) {
     Cpu *c = guest_cpu();
-    if (c && c->x[30] == FRAME_CONTROLLER_LR) {
+    if (c) {
+        LOG("[nvn] nvnWindowSetPresentInterval called: window = %p, v = %d, c->x[30] = %llx", w, v, c->x[30]);
+    }
+    if (c && (c->x[30] == FRAME_CONTROLLER_LR_143 || c->x[30] == FRAME_CONTROLLER_LR_142)) {
         static int max_iv = -1;
         if (max_iv < 0) { const char *e = getenv("TOTK_MAX_INTERVAL"); max_iv = e && *e ? atoi(e) : 2; LOG("[nvn] present interval limit %d (TOTK_MAX_INTERVAL; 0 = the game's own limit)", max_iv); }
         if (!g_frame_ctl) { g_frame_ctl = c->x[20]; if (!g_game_sys) { g_game_sys = c->x[19]; LOG("[nvn] game system object %#llx, interval controller %#llx", (unsigned long long)g_game_sys, (unsigned long long)g_frame_ctl); } }
         uint32_t *ctl = (uint32_t *)(uintptr_t)c->x[20];
+        if (max_iv > 0 && ctl[0] > (uint32_t)max_iv) ctl[0] = (uint32_t)max_iv;
         if (max_iv > 0 && ctl[1] > (uint32_t)max_iv) ctl[1] = (uint32_t)max_iv;
         if (max_iv > 0 && v > max_iv) { v = max_iv; c->x[21] = (uint32_t)v; ctl[0x40 / 4] = (uint32_t)v; }
     }
@@ -2260,8 +2319,8 @@ static double g_rt_period_ms;
 static void sleep_until_ns(uint64_t dl);
 static uint64_t present_period(const win_t *o);
 static unsigned present_ticks(const win_t *o);
-extern void runtime_frame_step_update(uint64_t now_ns) __attribute__((weak_import));
-extern void movie_host_tick(void) __attribute__((weak_import));   /* TOTK runtime/movie_host.c: pre-rendered cutscenes at their own frame rate */
+extern void runtime_frame_step_update(uint64_t now_ns) __attribute__((weak));
+extern void movie_host_tick(void) __attribute__((weak));   /* TOTK runtime/movie_host.c: pre-rendered cutscenes at their own frame rate */
 __attribute__((weak)) void dm_main_yield_stats(uint64_t *n, uint64_t *ns) { *n = 0; *ns = 0; }   // 宿主 hle_thread.c 提供真值；图形单测里为 0 | The host's hle_thread.c provides the ground truth; 0 in graphics unit tests
 __attribute__((weak)) uint32_t dm_guest_work_qos(unsigned *count) { if (count) *count = 0; return QOS_CLASS_UNSPECIFIED; }
 extern uint32_t mtl_present_qos(void);
@@ -2667,11 +2726,13 @@ int (*g_nvn_loadscreen_up)(void);   // 宿主登记：读取画面此刻是否�
 // The present itself: screenshot hook, then the present queue (returns at once). frame != 0 (translation thread): also the
 // replay frame number, which the synchronous path sets at the end of nvnQueuePresentTexture.
 static void present_exec(win_t *o, int idx, double period, const int crop[4], uint64_t frame) {
+    uint64_t t0 = now_ns();
     gfx_enter();
     { void mtl_shot_at_present(const tex_t *t); if (idx >= 0 && idx < o->ntex && idx < 4) mtl_shot_at_present(CTX(o->tex[idx])); }
-    if (idx >= 0 && idx < o->ntex && idx < 4) o->ticket[idx] = mtl_present(CTX(o->tex[idx]), period, (int *)crop);   // 只入队，立即返回 | enqueue only, return immediately
+    if (idx >= 0 && idx < o->ntex && idx < 4) o->ticket[idx] = mtl_present(CTX(o->tex[idx]), period, (int *)crop);
     if (frame) mtl_set_frame(frame);
     gfx_leave();
+    atomic_fetch_add(&g_nvn_ns, now_ns() - t0);
 }
 NVN(nvnQueuePresentTexture, void, NVNqueue *q, NVNwindow *w, int idx) {
     NVN_BLOCKING();
