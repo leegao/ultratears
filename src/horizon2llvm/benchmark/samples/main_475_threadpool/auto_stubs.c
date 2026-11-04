@@ -39,10 +39,33 @@ uint64_t stub_get_trace_hash(void) { return g_stub_trace_hash; }
 uint64_t stub_get_call_count(void) { return g_stub_call_count; }
 uint64_t stub_get_heap_ptr(void)   { return g_stub_heap_ptr; }
 
+// Constraint-Solved Entry Register, Guest Memory & Branch Policy Initializer
+// path_mode = 0 -> Maximal Finite Path (Longest DAG Path)
+// path_mode = 1 -> Representative Common Path (Expected DAG Path)
+void stub_apply_path_params(Cpu* c, int path_mode, uint64_t fbase) {
+    if (!c || fbase < 0x800000000ULL) return;
+    if (path_mode == 0) { // Longest Finite Path for f_80084d7f0 (508 ARM64 insns, 6 BBs)
+        c->x[0] = fbase + 0x1000ULL; // X0 (arena ptr)
+        c->x[1] = fbase + 0x2000ULL; // X1 (arena ptr)
+        *(uint64_t*)(uintptr_t)(fbase + 0x2000ULL + (0x0LL)) = fbase + 0x6000ULL; // MEM[X1+0x0]
+        *(uint64_t*)(uintptr_t)(fbase + 0x2000ULL + (0xb0LL)) = fbase + 0x7000ULL; // MEM[X1+0xb0]
+        *(uint64_t*)(uintptr_t)(fbase + 0x7000ULL + (0x0LL)) = fbase + 0x8000ULL; // MEM[MEM[X1+0xb0]+0x0]
+        *(uint64_t*)(uintptr_t)(fbase + 0x6000ULL + (0x38LL)) = 0x8006e88d8ULL; // MEM[MEM[X1+0x0]+0x38]
+        g_stub_branch_policy = 0x0u;
+    } else { // Common Path for f_80084d7f0 (105 ARM64 insns, 29 BBs)
+        c->x[0] = fbase + 0x1000ULL; // X0 (arena ptr)
+        c->x[1] = fbase + 0x2000ULL; // X1 (arena ptr)
+        *(uint64_t*)(uintptr_t)(fbase + 0x9000ULL + (0x8LL)) = fbase + 0xb000ULL; // MEM[MEM[GLOBAL+0x803abac40]+0x8]
+        *(uint32_t*)(uintptr_t)(fbase + 0xb000ULL + (0x50LL)) = 0x1ULL; // MEM[MEM[MEM[GLOBAL+0x803abac40]+0x8]+0x50]
+        g_stub_branch_policy = 0x1u;
+    }
+}
+
 static inline void clobber_caller_saved(Cpu* c, uint64_t tag, int args) {
     (void)args;
     g_stub_call_count++;
     if (g_bench_mode) return;
+    g_stub_trace_hash = (g_stub_trace_hash ^ tag ^ c->x[0]) * 0x100000001B3ULL;
     for (int r = 1; r <= 17; ++r) c->x[r] ^= (tag + r);
 }
 
@@ -95,8 +118,8 @@ void f_800099ae0(Cpu* c) {
 void f_8002908bc(Cpu* c) {
     clobber_caller_saved(c, 0x8002908bcULL, 2);
     if (++s_loop_bound_f_8002908bc > 100) {
-        c->x[0] = guest_alloc(128);
+        c->x[0] = 0x1ULL;
         return;
     }
-    c->x[0] = (g_stub_branch_policy & 0x2u) ? guest_alloc(128) : 0x0ULL;
+    c->x[0] = (g_stub_branch_policy & 0x2u) ? 0x1ULL : 0x0ULL;
 }

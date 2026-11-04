@@ -1,59 +1,71 @@
 {
   "sample_id": "main_432",
   "total_arm64_insns": 1509,
-  "total_common_path_insns": 632,
+  "total_common_path_insns": 720,
   "total_longest_path_insns": 4401,
+  "total_basic_blocks": 333,
+  "total_back_edges": 24,
   "functions": [
     {
       "name": "f_80077bc00",
-      "entry_pc": 34367585280,
+      "entry_pc": "0x80077bc00",
       "static_insns": 127,
       "basic_blocks": 1,
       "back_edges": 0,
       "common_path_insns": 134,
-      "longest_path_insns": 134
+      "longest_path_insns": 134,
+      "cp_sat_longest_insns": 134,
+      "cp_sat_common_insns": 134
     },
     {
       "name": "f_80077be18",
-      "entry_pc": 34367585816,
+      "entry_pc": "0x80077be18",
       "static_insns": 179,
       "basic_blocks": 36,
       "back_edges": 2,
-      "common_path_insns": 105,
-      "longest_path_insns": 577
+      "common_path_insns": 164,
+      "longest_path_insns": 577,
+      "cp_sat_longest_insns": 577,
+      "cp_sat_common_insns": 164
     },
     {
       "name": "f_80077c0e4",
-      "entry_pc": 34367586532,
+      "entry_pc": "0x80077c0e4",
       "static_insns": 39,
       "basic_blocks": 10,
       "back_edges": 1,
-      "common_path_insns": 32,
-      "longest_path_insns": 76
+      "common_path_insns": 41,
+      "longest_path_insns": 76,
+      "cp_sat_longest_insns": 76,
+      "cp_sat_common_insns": 41
     },
     {
       "name": "f_80077c180",
-      "entry_pc": 34367586688,
+      "entry_pc": "0x80077c180",
       "static_insns": 961,
       "basic_blocks": 243,
       "back_edges": 20,
-      "common_path_insns": 320,
-      "longest_path_insns": 3424
+      "common_path_insns": 335,
+      "longest_path_insns": 3424,
+      "cp_sat_longest_insns": 3424,
+      "cp_sat_common_insns": 335
     },
     {
       "name": "f_80077d084",
-      "entry_pc": 34367590532,
+      "entry_pc": "0x80077d084",
       "static_insns": 203,
       "basic_blocks": 43,
       "back_edges": 1,
-      "common_path_insns": 41,
-      "longest_path_insns": 190
+      "common_path_insns": 46,
+      "longest_path_insns": 190,
+      "cp_sat_longest_insns": 190,
+      "cp_sat_common_insns": 46
     }
   ],
   "num_branch_sensitive": 8,
-  "num_pointer_alloc": 1,
+  "num_pointer_alloc": 2,
   "num_memory_copy": 0,
-  "num_constant_zero": 14,
+  "num_constant_zero": 13,
   "external_stubs": [
     "f_8003f9d50",
     "f_8000340bc",
@@ -78,5 +90,66 @@
     "f_8002152a0",
     "f_802ba3ac0",
     "f_8027d342c"
-  ]
+  ],
+  "solver_backend": "OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver",
+  "longest_path_branch_policy": 120,
+  "common_path_branch_policy": 255,
+  "longest_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000"
+  },
+  "common_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000"
+  },
+  "longest_path_stub_returns": {
+    "f_8003f9d50": "0x0",
+    "f_8000340bc": "0x0",
+    "f_800789c30": "0x0",
+    "f_800b54d3c": "0x0",
+    "f_800781d60": "0x0",
+    "f_8001a1590": "guest_alloc(128)",
+    "f_800079d20": "0x1 (policy bit #0=0)",
+    "f_802ba39a0": "0x1 (policy bit #1=0)",
+    "f_802ba39b0": "0x0",
+    "f_802ba40a0": "0x0 (policy bit #2=0)",
+    "f_802ba40b0": "0x0",
+    "f_802ba41b0": "0x0",
+    "f_802ba4a70": "0x0",
+    "f_80077fee0": "0x0",
+    "f_802ba4080": "0x0",
+    "f_8001a6c10": "guest_alloc(128)",
+    "f_80077d3b0": "0x0",
+    "f_80077fec4": "0x0 (policy bit #3=1)",
+    "f_8001797dc": "0x0 (policy bit #4=1)",
+    "f_80084d7f0": "0x0 (policy bit #5=1)",
+    "f_8002152a0": "0x0 (policy bit #6=1)",
+    "f_802ba3ac0": "0x0 (policy bit #7=0)",
+    "f_8027d342c": "0x0"
+  },
+  "common_path_stub_returns": {
+    "f_8003f9d50": "0x0",
+    "f_8000340bc": "0x0",
+    "f_800789c30": "0x0",
+    "f_800b54d3c": "0x0",
+    "f_800781d60": "0x0",
+    "f_8001a1590": "guest_alloc(128)",
+    "f_800079d20": "0x0 (policy bit #0=1)",
+    "f_802ba39a0": "0x0 (policy bit #1=1)",
+    "f_802ba39b0": "0x0",
+    "f_802ba40a0": "0x1 (policy bit #2=1)",
+    "f_802ba40b0": "0x0",
+    "f_802ba41b0": "0x0",
+    "f_802ba4a70": "0x0",
+    "f_80077fee0": "0x0",
+    "f_802ba4080": "0x0",
+    "f_8001a6c10": "guest_alloc(128)",
+    "f_80077d3b0": "0x0",
+    "f_80077fec4": "0x0 (policy bit #3=1)",
+    "f_8001797dc": "0x0 (policy bit #4=1)",
+    "f_80084d7f0": "0x0 (policy bit #5=1)",
+    "f_8002152a0": "0x0 (policy bit #6=1)",
+    "f_802ba3ac0": "0x1 (policy bit #7=1)",
+    "f_8027d342c": "0x0"
+  }
 }

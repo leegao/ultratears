@@ -2,9 +2,9 @@
 
 ## 1. Function Static CFG & Path Length Summary
 
-| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `f_8001a6c10` | `0x8001a6c10` | 707 | 192 | 9 | 42 | 275 |
+| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) | CP-SAT Verified Longest |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f_8001a6c10` | `0x8001a6c10` | 707 | 192 | 9 | 39 | 275 | 275 |
 
 ## 2. Function Control Flow Graphs (CFGs)
 
@@ -569,3 +569,46 @@ flowchart TD
 | `f_80017c9c8` | **BRANCH_SENSITIVE** | 2 | `0x0` | `0x1` | CBNZ on return register x0 at 0x8001a73e4 |
 | `f_8027a9c88` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_80017cbe0` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+
+## 4. Constraint-Solved Parameters for Maximal Finite & Common Paths
+
+### Function `f_8001a6c10` (`0x8001a6c10`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **275 insns** (45 basic blocks) | **39 insns** (6 basic blocks) |
+| **Path Predicates Solved** | 30 branch/switch constraints | 3 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0x1` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Stub Return `f_80007a838` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800099ce0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80017c9c8` (`X0`)** | `0x0 (policy bit #0=0)` | `0x1 (policy bit #0=1)` |
+| **Stub Return `f_80017cbe0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027a9c88` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba3ac0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4060` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4070` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x8001a6c44: MEM[MEM[GLOBAL+0x80394ba80]+0x0] != NULL (valid 64-bit pointer)`
+- `0x8001a6c4c: X1 eq 0`
+- `0x8001a720c: MEM[OBJ_ANON+0x0] != NULL (valid 64-bit pointer)`
+- `0x8001a6c64: MEM[MEM[MEM[OBJ_ANON+0x0]+0x0]+0x30] ne 34366074320`
+- `0x8001a6d14: MEM[MEM[MEM[OBJ_ANON+0x0]+0x0]+0x30] ne 34361896524`
+- `0x8001a6d24: MEM[MEM[MEM[OBJ_ANON+0x0]+0x0]+0x30] eq 34361295696`
+- `0x8001a6d60: bit #0 of MEM[MEM[OBJ_ANON+0x0]+0xa8] == 1 -> MEM[MEM[OBJ_ANON+0x0]+0xa8] |= 0x1`
+- `0x8001a6d70: bit #31 of MEM[MEM[OBJ_ANON+0x0]+0x80] == 0`
+- `0x8001a6d94: MEM[MEM[OBJ_ANON+0x0]+0x80] hi 8`
+- `0x8001a6f74: MEM[MEM[OBJ_ANON+0x0]+0xb8] ne MEM[MEM[OBJ_ANON+0x0]+0xc4]`
+- `0x8001a6f84: MEM[MEM[OBJ_ANON+0x0]+0xac] ne 0`
+- `0x8001a7500: MEM[MEM[OBJ_ANON+0x0]+0xac] ne 1`
+- `0x8001a75b8: MEM[MEM[OBJ_ANON+0x0]+0xac] eq 2`
+- `0x8001a7614: MEM[GLOBAL+0x18] lo MEM[OBJ_ANON+0x18]`
+- `0x8001a75dc: MEM[OBJ_ANON+0x8] eq MEM[MEM[OBJ_ANON+0x0]+0xc4]`
+- `0x8001a7670: MEM[MEM[OBJ_ANON+0x0]+0xb8] != NULL (valid 64-bit pointer)`
+- `0x8001a7018: MEM[MEM[MEM[OBJ_ANON+0x0]+0xc4]+0x0] != NULL (valid 64-bit pointer)`
+- `0x8001a7028: MEM[MEM[MEM[OBJ_ANON+0x0]+0xc4]+0x8] != NULL (valid 64-bit pointer)`
+- `0x8001a705c: MEM[MEM[OBJ_ANON+0x0]+0x80] ne 1`
+- `0x8001a7084: MEM[OBJ_ANON+0x18] hs 33`

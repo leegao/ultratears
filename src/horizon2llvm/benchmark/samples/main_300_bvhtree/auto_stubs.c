@@ -35,10 +35,52 @@ uint64_t stub_get_trace_hash(void) { return g_stub_trace_hash; }
 uint64_t stub_get_call_count(void) { return g_stub_call_count; }
 uint64_t stub_get_heap_ptr(void)   { return g_stub_heap_ptr; }
 
+// Constraint-Solved Entry Register, Guest Memory & Branch Policy Initializer
+// path_mode = 0 -> Maximal Finite Path (Longest DAG Path)
+// path_mode = 1 -> Representative Common Path (Expected DAG Path)
+void stub_apply_path_params(Cpu* c, int path_mode, uint64_t fbase) {
+    if (!c || fbase < 0x800000000ULL) return;
+    if (path_mode == 0) { // Longest Finite Path for f_8004e71b0 (1243 ARM64 insns, 74 BBs)
+        c->x[0] = fbase + 0x1000ULL; // X0 (arena ptr)
+        c->x[1] = fbase + 0x2000ULL; // X1 (arena ptr)
+        c->x[2] = fbase + 0x3000ULL; // X2 (arena ptr)
+        c->x[3] = 0xfULL; // X3 = 15
+        *(uint64_t*)(uintptr_t)(fbase + 0x3000ULL + (0x2cLL)) = fbase + 0xa000ULL; // MEM[X2+0x2c]
+        *(uint64_t*)(uintptr_t)(fbase + 0x3000ULL + (0x80LL)) = fbase + 0xb000ULL; // MEM[X2+0x80]
+        *(uint64_t*)(uintptr_t)(fbase + 0x3000ULL + (0x8LL)) = fbase + 0xc000ULL; // MEM[X2+0x8]
+        *(uint64_t*)(uintptr_t)(fbase + 0x6000ULL + (0x0LL)) = fbase + 0xd000ULL; // MEM[MEM[GLOBAL+0x80394cf58]+0x0]
+        *(uint64_t*)(uintptr_t)(fbase + 0x8000ULL + (0x10LL)) = fbase + 0xe000ULL; // MEM[MEM[OBJ_ANON+0x20]+0x10]
+        *(uint64_t*)(uintptr_t)(fbase + 0xa000ULL + (0x38LL)) = fbase + 0xf000ULL; // MEM[MEM[X2+0x2c]+0x38]
+        *(uint64_t*)(uintptr_t)(fbase + 0xa000ULL + (0x3cLL)) = fbase + 0x10000ULL; // MEM[MEM[X2+0x2c]+0x3c]
+        *(uint64_t*)(uintptr_t)(fbase + 0xb000ULL + (0x0LL)) = fbase + 0x11000ULL; // MEM[MEM[X2+0x80]+0x0]
+        *(uint64_t*)(uintptr_t)(fbase + 0xe000ULL + (0x0LL)) = fbase + 0x12000ULL; // MEM[MEM[MEM[OBJ_ANON+0x20]+0x10]+0x0]
+        *(uint64_t*)(uintptr_t)(fbase + 0x12000ULL + (0x8LL)) = fbase + 0x13000ULL; // MEM[MEM[MEM[MEM[OBJ_ANON+0x20]+0x10]+0x0]+0x8]
+        *(uint64_t*)(uintptr_t)(fbase + 0x13000ULL + (0x4f0LL)) = fbase + 0x14000ULL; // MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x20]+0x10]+0x0]+0x8]+0x4f0]
+        *(uint32_t*)(uintptr_t)(fbase + 0x3000ULL + (0x78LL)) = 0x8ULL; // MEM[X2+0x78]
+        *(uint32_t*)(uintptr_t)(fbase + 0x8000ULL + (0xcLL)) = 0x5ULL; // MEM[MEM[OBJ_ANON+0x20]+0xc]
+        *(uint32_t*)(uintptr_t)(fbase + 0xa000ULL + (0x1df8LL)) = 0x1ULL; // MEM[MEM[X2+0x2c]+0x1df8]
+        *(uint32_t*)(uintptr_t)(fbase + 0xd000ULL + (0x960LL)) = 0x6ULL; // MEM[MEM[MEM[GLOBAL+0x80394cf58]+0x0]+0x960]
+        *(uint8_t*)(uintptr_t)(fbase + 0x11000ULL + (0x0LL)) = 0x1ULL; // MEM[MEM[MEM[X2+0x80]+0x0]+0x0]
+        *(uint16_t*)(uintptr_t)(fbase + 0x12000ULL + (0x12LL)) = 0x1006ULL; // MEM[MEM[MEM[MEM[OBJ_ANON+0x20]+0x10]+0x0]+0x12]
+        *(uint64_t*)(uintptr_t)(fbase + 0x13000ULL + (0x502LL)) = 0x1ULL; // MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x20]+0x10]+0x0]+0x8]+0x502]
+        *(uint64_t*)(uintptr_t)(fbase + 0x14000ULL + (0x0LL)) = 0x1ULL; // MEM[MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x20]+0x10]+0x0]+0x8]+0x4f0]+0x0]
+        g_stub_branch_policy = 0x0u;
+    } else { // Common Path for f_8004e71b0 (27 ARM64 insns, 5 BBs)
+        c->x[0] = fbase + 0x1000ULL; // X0 (arena ptr)
+        c->x[1] = fbase + 0x2000ULL; // X1 (arena ptr)
+        c->x[2] = fbase + 0x3000ULL; // X2 (arena ptr)
+        *(uint64_t*)(uintptr_t)(fbase + 0x3000ULL + (0x8LL)) = fbase + 0x7000ULL; // MEM[X2+0x8]
+        *(uint64_t*)(uintptr_t)(fbase + 0x6000ULL + (0x0LL)) = fbase + 0x8000ULL; // MEM[MEM[GLOBAL+0x80394cf58]+0x0]
+        *(uint32_t*)(uintptr_t)(fbase + 0x8000ULL + (0x960LL)) = 0x1ULL; // MEM[MEM[MEM[GLOBAL+0x80394cf58]+0x0]+0x960]
+        g_stub_branch_policy = 0x0u;
+    }
+}
+
 static inline void clobber_caller_saved(Cpu* c, uint64_t tag, int args) {
     (void)args;
     g_stub_call_count++;
     if (g_bench_mode) return;
+    g_stub_trace_hash = (g_stub_trace_hash ^ tag ^ c->x[0]) * 0x100000001B3ULL;
     for (int r = 1; r <= 17; ++r) c->x[r] ^= (tag + r);
 }
 

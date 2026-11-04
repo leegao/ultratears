@@ -32,6 +32,7 @@ bool SharedModuleHandle::load(const std::string& so_path, const std::vector<std:
     stub_get_trace_hash = reinterpret_cast<GetU64Fn>(dlsym(dl, "stub_get_trace_hash"));
     stub_get_call_count = reinterpret_cast<GetU64Fn>(dlsym(dl, "stub_get_call_count"));
     stub_get_heap_ptr = reinterpret_cast<GetU64Fn>(dlsym(dl, "stub_get_heap_ptr"));
+    stub_apply_path_params = reinterpret_cast<ApplyPathParamsFn>(dlsym(dl, "stub_apply_path_params"));
 
     if (!stub_reset_state || !stub_get_trace_hash || !stub_get_call_count || !stub_get_heap_ptr) {
         std::fprintf(stderr, "Failed to resolve stub management symbols in %s\n", so_path.c_str());
@@ -54,6 +55,7 @@ void SharedModuleHandle::close() {
     stub_get_trace_hash = nullptr;
     stub_get_call_count = nullptr;
     stub_get_heap_ptr = nullptr;
+    stub_apply_path_params = nullptr;
 }
 
 } // namespace ultrs::benchmark

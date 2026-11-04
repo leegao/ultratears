@@ -49,20 +49,35 @@ The generated `sample.ll` preserves original function entries and attaches LLVM 
 ### Step 3: Synthesize Stubs & Reconstruct CFG via `stub_analyzer.py`
 Run the unified Python stub analyzer on the new sample directory:
 ```bash
-python3 src/horizon2llvm/benchmark/stub_analyzer.py src/horizon2llvm/benchmark/samples/<sample_id>
+python3 src/horizon2llvm/benchmark/stub_analyzer.py src/horizon2llvm/benchmark/samples/<sample_id> [--solver-backend {auto,cp_sat,milp,dp}]
 ```
+The constraint solver and symbolic execution pipeline is organized into the modular `src/horizon2llvm/benchmark/autostub/` package:
+- `rodata.py`: Pure-Python RFC 8478 / LZ4 decompressor and NSO `.rodata` section extractor.
+- `models.py`: CFG block structures, metrics, and callee classification dataclasses.
+- `cfg.py`: Disassembly parsing, block boundary detection, dominance trees, and natural loop back-edge detection.
+- `solver.py`: Unit DAG flow formulation supporting Google OR-Tools CP-SAT, SciPy HiGHS MILP, and reverse-topological Dynamic Programming.
+- `sym_expr.py`: AST definitions (`SymConst`, `SymVar`, `SymBinary`, `SymExtract`, etc.) and a pure-Python symbolic Bit-Vector & Interval SMT solver.
+- `transfer.py`: Abstract interpretation framework with default transfer functions for standard arithmetic/shifts, overridden by `AArch64TransferFunction` for architecture-specific semantics (`adrp`, `ldp`, `ldr`, flag-setting operations, and `.rodata` constant lookups).
+- `tracer.py`: Two-pass symbolic execution engine (`SymbolicExecutionEngine` / `AArch64SymbolicPathTracer`) tracing branch predicates along selected DAG paths.
+- `param_solver.py`: SMT-based concrete assignment generator solving entry registers (`X0..X7`) and arena memory locations.
+- `callees.py`: Callee classification discovering allocators, memory copy subroutines, branch-sensitive jumps, and unused returns.
+- `synthesizer.py`: Code emission for `auto_stubs.c`, `STUB_ANALYSIS.md`, and `stub_analysis.json`.
+
 This automatically performs:
 1. **Instruction Parsing**: Parses mnemonics (`bl`, `cbz`, `tbz`, `b.cond`, `ret`) from `sample_arm64.asm`.
-2. **CFG Reconstruction**: Discovers basic block boundaries and detects loop back-edges.
-3. **Iterative Fixed-Point DAG Relaxation**: Computes static instruction bounds for:
-   - **Longest Path**: $\text{Len}(B) + \text{LoopBonus} + \max \text{succ}$
-   - **Common Path**: $\text{Len}(B) + \text{LoopBonus} + \text{avg } \text{succ}$
-4. **Callee Classification**:
+2. **CFG Reconstruction & Dominance**: Discovers basic block boundaries and detects loop back-edges via dominance frontiers.
+3. **DAG Constraint Optimization**: Solves the maximal-length finite path and representative common path across the DAG:
+   - Formulated as a single-source single-sink unit network flow problem solved via CP-SAT / MILP / DP.
+4. **Two-Pass Symbolic Path Parameter Synthesis**:
+   - Collects path branch constraints along the solved paths.
+   - Solves for concrete entry register values (`X0..X7`) and guest memory addresses satisfying all branch conditions.
+5. **Callee Classification**:
    - `CONSTANT_ZERO`: Callee return in `X0` unused or overwritten.
-   - `POINTER_ALLOC`: Dereferenced pointer return; stubs allocate from bump heap.
-   - `BRANCH_SENSITIVE`: Return value tested by immediate conditional branch.
-5. **Artifact Generation**:
-   - `auto_stubs.c`: Self-contained C implementation with loop bounded execution ($N \le 100$).
+   - `POINTER_ALLOC`: Dereferenced pointer return or well-known allocator entry points (`KNOWN_ALLOC_PCS`).
+   - `MEMORY_COPY`: Standard three-argument copy routine (`X0` dst, `X1` src, `X2` len).
+   - `BRANCH_SENSITIVE`: Return value tested by immediate conditional branch (`cbz`, `tbz`, `cmp` + `b.cond`).
+6. **Artifact Generation**:
+   - `auto_stubs.c`: Self-contained C implementation with loop bounded execution ($N \le 100$) and `stub_apply_path_params(Cpu* c, int path_mode, uint64_t fbase)`.
    - `STUB_ANALYSIS.md`: Markdown documentation containing Mermaid `flowchart TD` diagrams for each function.
    - `stub_analysis.json`: Ingestible metadata consumed by `GenericSampleHarness` in C++.
 

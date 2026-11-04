@@ -3,15 +3,19 @@
   "total_arm64_insns": 1122,
   "total_common_path_insns": 45,
   "total_longest_path_insns": 500,
+  "total_basic_blocks": 345,
+  "total_back_edges": 21,
   "functions": [
     {
       "name": "f_8021c31d4",
-      "entry_pc": 34395140564,
+      "entry_pc": "0x8021c31d4",
       "static_insns": 1122,
       "basic_blocks": 345,
       "back_edges": 21,
       "common_path_insns": 45,
-      "longest_path_insns": 500
+      "longest_path_insns": 500,
+      "cp_sat_longest_insns": 500,
+      "cp_sat_common_insns": 45
     }
   ],
   "num_branch_sensitive": 1,
@@ -40,5 +44,63 @@
     "f_80219699c",
     "f_802196a0c",
     "f_802196a7c"
-  ]
+  ],
+  "solver_backend": "OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver",
+  "longest_path_branch_policy": 0,
+  "common_path_branch_policy": 1,
+  "longest_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000",
+    "X2": "0x0 (0)"
+  },
+  "common_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000"
+  },
+  "longest_path_stub_returns": {
+    "f_8006ad38c": "0x0",
+    "f_8006aec40": "0x0",
+    "f_8021a0e4c": "0x0",
+    "f_8021a5128": "0x0",
+    "f_802ba39a0": "0x1 (policy bit #0=0)",
+    "f_802ba39b0": "0x0",
+    "f_8021a52d0": "0x0",
+    "f_8021b69a4": "0x0",
+    "f_8021ac220": "0x0",
+    "f_8021ac1cc": "guest_alloc(128)",
+    "f_8021a1648": "guest_alloc(128)",
+    "f_8021a53d8": "0x0",
+    "f_8021a5354": "0x0",
+    "f_8021a4594": "0x0",
+    "f_8021a1390": "guest_alloc(128)",
+    "f_8021a1408": "guest_alloc(128)",
+    "f_8021a1318": "guest_alloc(128)",
+    "f_8021968bc": "0x0",
+    "f_80219699c": "0x0",
+    "f_802196a0c": "0x0",
+    "f_802196a7c": "0x0"
+  },
+  "common_path_stub_returns": {
+    "f_8006ad38c": "0x0",
+    "f_8006aec40": "0x0",
+    "f_8021a0e4c": "0x0",
+    "f_8021a5128": "0x0",
+    "f_802ba39a0": "0x0 (policy bit #0=1)",
+    "f_802ba39b0": "0x0",
+    "f_8021a52d0": "0x0",
+    "f_8021b69a4": "0x0",
+    "f_8021ac220": "0x0",
+    "f_8021ac1cc": "guest_alloc(128)",
+    "f_8021a1648": "guest_alloc(128)",
+    "f_8021a53d8": "0x0",
+    "f_8021a5354": "0x0",
+    "f_8021a4594": "0x0",
+    "f_8021a1390": "guest_alloc(128)",
+    "f_8021a1408": "guest_alloc(128)",
+    "f_8021a1318": "guest_alloc(128)",
+    "f_8021968bc": "0x0",
+    "f_80219699c": "0x0",
+    "f_802196a0c": "0x0",
+    "f_802196a7c": "0x0"
+  }
 }

@@ -2,9 +2,9 @@
 
 ## 1. Function Static CFG & Path Length Summary
 
-| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `f_800062d9c` | `0x800062d9c` | 2337 | 358 | 36 | 137 | 1963 |
+| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) | CP-SAT Verified Longest |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f_800062d9c` | `0x800062d9c` | 2337 | 358 | 36 | 228 | 1963 | 1963 |
 
 ## 2. Function Control Flow Graphs (CFGs)
 
@@ -1023,7 +1023,7 @@ flowchart TD
     style B_800064598 fill:#ffeedd,stroke:#e65100,stroke-width:2px,color:#bf360c
 ```
 
-## 3. External Callee Classification (49 total: 42 constant-zero, 3 pointer-alloc, 0 memory-copy, 4 branch-sensitive)
+## 3. External Callee Classification (49 total: 41 constant-zero, 4 pointer-alloc, 0 memory-copy, 4 branch-sensitive)
 
 | External Symbol | Classification | Args Read | Longest-Path Return (`X0`) | Alt-Branch Return (`X0`) | Post-Call Analysis |
 | :--- | :--- | ---: | :--- | :--- | :--- |
@@ -1041,7 +1041,7 @@ flowchart TD
 | `f_80015d7bc` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_800105f90` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8000f2558` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
-| `f_8001192e4` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+| `f_8001192e4` | `POINTER_ALLOC` | 3 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8000635e0 |
 | `f_802ba5960` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_802b2d038` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8000f1a88` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
@@ -1053,7 +1053,7 @@ flowchart TD
 | `f_802ba39a0` | **BRANCH_SENSITIVE** | 2 | `0x1` | `0x0` | CBZ on return register w0 at 0x800063e34 |
 | `f_802ba39b0` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_800b3a298` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x800063e90 |
-| `f_800c323d0` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x800063f64 |
+| `f_800c323d0` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x800063f58 |
 | `f_801ec1db8` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_801ebba6c` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_800125710` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
@@ -1076,3 +1076,88 @@ flowchart TD
 | `f_802b17d0c` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_800b468f0` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_801ee6154` | `CONSTANT_ZERO` | 5 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+
+## 4. Constraint-Solved Parameters for Maximal Finite & Common Paths
+
+### Function `f_800062d9c` (`0x800062d9c`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **1963 insns** (86 basic blocks) | **228 insns** (8 basic blocks) |
+| **Path Predicates Solved** | 55 branch/switch constraints | 4 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0xe` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Entry Register `X2`** | `0x0 (0)` | ``0x0`` |
+| **Stub Return `f_8000e08c4` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000ef6d8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f1808` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f1a88` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f1de0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f2558` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f2a00` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f75a8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f78c4` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8000f9d10` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800105f90` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800106c00` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800107e80` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8001192e4` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_800125710` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800138d60` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80015d7bc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80048d084` (`X0`)** | `0x1 (policy bit #3=0)` | `0x0 (policy bit #3=1)` |
+| **Stub Return `f_80049309c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800494654` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8004b19a0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8006906c8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800b3a298` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_800b4284c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800b44314` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_800b4641c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800b468f0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800c323d0` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_800c6f200` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800cf02d0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800e69458` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ebba6c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ebf5f0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ec0bb8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ec0c40` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ec1db8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ec1e84` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ec26e0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801ee6154` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027c3748` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027c7874` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027dc908` (`X0`)** | `0x1 (policy bit #2=0)` | `0x0 (policy bit #2=1)` |
+| **Stub Return `f_802b17d0c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802b2d038` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #1=0)` | `0x0 (policy bit #1=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4060` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4070` (`X0`)** | `0x0 (policy bit #0=0)` | `0x0 (policy bit #0=0)` |
+| **Stub Return `f_802ba5960` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x800062e34: MEM[MEM[OBJ_ANON+0x8]+0x0] eq 34364532296`
+- `0x800062ebc: MEM[OBJ_ANON+0x10] != NULL (valid 64-bit pointer)`
+- `0x800062ecc: MEM[OBJ_ANON+0x18] != NULL (valid 64-bit pointer)`
+- `0x800062ed4: (MEM[OBJ_ANON+0x20] & 0x1) != 0 -> MEM[OBJ_ANON+0x20] |= 0x1`
+- `0x800062ee4: MEM[MEM[MEM[OBJ_ANON+0x10]+0x0]+0x0] eq 34392115268`
+- `0x80006301c: MEM[X1+0xc] eq 0`
+- `0x800063028: MEM[X1+0x8] eq 0`
+- `0x80006309c: MEM[X1+0x10] le 22`
+- `0x800063a6c: MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x18] ge 1`
+- `0x8000641d8: MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0] != NULL (valid 64-bit pointer)`
+- `0x8000641f0: MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0] ne -1`
+- `0x8000641fc: bit #2 of MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0]+0x48] == 0`
+- `0x800064200: bit #1 of MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0]+0x48] == 1 -> MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0]+0x48] |= 0x2`
+- `0x800064210: MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0] pl -1`
+- `0x800064264: MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0] gt -1`
+- `0x800064274: MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0] pl -1`
+- `0x8000642a8: bit #0 of MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0]+0x48] == 0`
+- `0x8000642ac: bit #3 of MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x10]+0x0]+0x48] == 0`
+- `0x80006430c: MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x18] le 0`
+- `0x800064378: MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x28]+0xffffffffffffffff]+0x3c] lt MEM[MEM[MEM[MEM[MEM[OBJ_ANON+0x10]+0xa00]+0x28]+0x0]+0x3c]`

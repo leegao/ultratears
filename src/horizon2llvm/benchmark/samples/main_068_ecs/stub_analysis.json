@@ -3,15 +3,19 @@
   "total_arm64_insns": 2608,
   "total_common_path_insns": 470,
   "total_longest_path_insns": 2872,
+  "total_basic_blocks": 638,
+  "total_back_edges": 84,
   "functions": [
     {
       "name": "f_800129820",
-      "entry_pc": 34360956960,
+      "entry_pc": "0x800129820",
       "static_insns": 2608,
       "basic_blocks": 638,
       "back_edges": 84,
       "common_path_insns": 470,
-      "longest_path_insns": 2872
+      "longest_path_insns": 2872,
+      "cp_sat_longest_insns": 2872,
+      "cp_sat_common_insns": 470
     }
   ],
   "num_branch_sensitive": 0,
@@ -21,5 +25,28 @@
   "external_stubs": [
     "f_80021b4ac",
     "f_8027cf394"
-  ]
+  ],
+  "solver_backend": "OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver",
+  "longest_path_branch_policy": 0,
+  "common_path_branch_policy": 0,
+  "longest_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000",
+    "X2": "fbase + 0x3000",
+    "X4": "0x7 (7)",
+    "X5": "fbase + 0x6000"
+  },
+  "common_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000",
+    "X4": "0x0 (0)"
+  },
+  "longest_path_stub_returns": {
+    "f_80021b4ac": "0x0",
+    "f_8027cf394": "0x0"
+  },
+  "common_path_stub_returns": {
+    "f_80021b4ac": "0x0",
+    "f_8027cf394": "0x0"
+  }
 }

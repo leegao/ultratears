@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
 #include <sstream>
@@ -427,6 +428,36 @@ public:
             }
             static_analysis_ = load_or_generate_stub_analysis(sample_dir_);
         }
+
+        std::string stubs_c = runtime_stubs_c_path();
+        if (!stubs_c.empty() && fs::exists(stubs_c)) {
+            std::string stubs_so = "/tmp/lib_harness_" + name_ + ".so";
+            bool need_build = true;
+            if (fs::exists(stubs_so)) {
+                auto t_c = fs::last_write_time(stubs_c);
+                auto t_so = fs::last_write_time(stubs_so);
+                if (t_so >= t_c) need_build = false;
+            }
+            if (need_build) {
+                const char* cc = (std::system("command -v clang >/dev/null 2>&1") == 0) ? "clang" : "gcc";
+                std::string cmd = std::string(cc) + " -O1 -shared -fPIC -Isrc/runtime -Isrc/horizon2llvm/runtime "
+                                  + stubs_c + " -o " + stubs_so + " >/dev/null 2>&1";
+                (void)std::system(cmd.c_str());
+            }
+            if (fs::exists(stubs_so)) {
+                stubs_dl_ = dlopen(stubs_so.c_str(), RTLD_NOW | RTLD_LOCAL);
+                if (stubs_dl_) {
+                    stub_apply_path_params_ = reinterpret_cast<ApplyPathParamsFn>(dlsym(stubs_dl_, "stub_apply_path_params"));
+                }
+            }
+        }
+    }
+
+    ~GenericSampleHarness() override {
+        if (stubs_dl_) {
+            dlclose(stubs_dl_);
+            stubs_dl_ = nullptr;
+        }
     }
 
     const char* name() const override { return name_.c_str(); }
@@ -539,24 +570,35 @@ public:
             c.x[r] = rng() & 0xFFFFULL;
         }
 
-        // Target-specific refinements deduced from entry guards
         uint64_t entry_pc = (fn_idx >= 0 && static_cast<size_t>(fn_idx) < chunk_.fns.size())
                             ? chunk_.fns[fn_idx].entry_pc : 0;
 
-        if (entry_pc == 0x8001161d0ULL) {
-            setup_target_main_067_statickernel(fbase, iter, c);
-        } else if (entry_pc == 0x8001a1590ULL) {
-            setup_target_main_105_alloc(fbase, iter, c);
-        } else if (entry_pc == 0x8001d2a5cULL) {
-            setup_target_main_121_simd(fbase, iter, c);
-        } else if (entry_pc == 0x8004e71b0ULL || entry_pc == 0x8004e8eecULL) {
-            setup_target_main_300_bvhtree(entry_pc, fbase, iter, c);
-        } else if (entry_pc == 0x8002824a0ULL) {
-            setup_target_main_159_dispatch(fbase, iter, c);
-        } else if (entry_pc == 0x80029e418ULL) {
-            setup_target_main_163_actor(fbase, iter, c);
-        } else if (name_ == "main_432" || (entry_pc >= 0x80077bc00ULL && entry_pc <= 0x80077d084ULL)) {
+        // Target-specific refinements: Prefer automated constraint-solved path parameter synthesis
+        // except in specialized cases where multi-function structures are required (e.g. main_432)
+        // that the single-function auto-stub cannot handle.
+        bool applied_auto_stubs = false;
+        if (name_ == "main_432" || (entry_pc >= 0x80077bc00ULL && entry_pc <= 0x80077d084ULL)) {
             setup_target_main_432(entry_pc, fn_idx, fbase, iter, c);
+        } else if (stub_apply_path_params_ && name_ != "main_180_eventengine") {
+            stub_apply_path_params_(&c, static_cast<int>(iter % 2), fbase);
+            applied_auto_stubs = true;
+        }
+
+        if (!applied_auto_stubs && name_ != "main_432") {
+            // Target-specific refinements deduced from entry guards (fallback if no auto-stub exists)
+            if (entry_pc == 0x8001161d0ULL) {
+                setup_target_main_067_statickernel(fbase, iter, c);
+            } else if (entry_pc == 0x8001a1590ULL) {
+                setup_target_main_105_alloc(fbase, iter, c);
+            } else if (entry_pc == 0x8001d2a5cULL) {
+                setup_target_main_121_simd(fbase, iter, c);
+            } else if (entry_pc == 0x8004e71b0ULL || entry_pc == 0x8004e8eecULL) {
+                setup_target_main_300_bvhtree(entry_pc, fbase, iter, c);
+            } else if (entry_pc == 0x8002824a0ULL) {
+                setup_target_main_159_dispatch(fbase, iter, c);
+            } else if (entry_pc == 0x80029e418ULL) {
+                setup_target_main_163_actor(fbase, iter, c);
+            }
         }
     }
 
@@ -594,6 +636,9 @@ public:
         if (handle.stub_reset_state) {
             handle.stub_reset_state(3);
         }
+        if (handle.stub_apply_path_params && name_ != "main_432" && name_ != "main_180_eventengine") {
+            handle.stub_apply_path_params(&c, static_cast<int>(s % 2), fbase);
+        }
     }
 
     void execute_bench_function(size_t state_idx, Cpu& c, const SharedModuleHandle& handle) override {
@@ -612,6 +657,8 @@ private:
     SampleStaticAnalysis static_analysis_;
     std::vector<Cpu> bench_cpus_;
     std::vector<std::vector<uint8_t>> slice_snaps_;
+    ApplyPathParamsFn stub_apply_path_params_ = nullptr;
+    void* stubs_dl_ = nullptr;
 };
 
 } // namespace

@@ -1,26 +1,32 @@
 {
   "sample_id": "main_300_bvhtree",
   "total_arm64_insns": 973,
-  "total_common_path_insns": 92,
+  "total_common_path_insns": 91,
   "total_longest_path_insns": 1401,
+  "total_basic_blocks": 149,
+  "total_back_edges": 12,
   "functions": [
     {
       "name": "f_8004e71b0",
-      "entry_pc": 34364879280,
+      "entry_pc": "0x8004e71b0",
       "static_insns": 648,
       "basic_blocks": 102,
       "back_edges": 12,
-      "common_path_insns": 29,
-      "longest_path_insns": 1243
+      "common_path_insns": 27,
+      "longest_path_insns": 1243,
+      "cp_sat_longest_insns": 1243,
+      "cp_sat_common_insns": 27
     },
     {
       "name": "f_8004e8eec",
-      "entry_pc": 34364886764,
+      "entry_pc": "0x8004e8eec",
       "static_insns": 325,
       "basic_blocks": 47,
       "back_edges": 0,
-      "common_path_insns": 63,
-      "longest_path_insns": 158
+      "common_path_insns": 64,
+      "longest_path_insns": 158,
+      "cp_sat_longest_insns": 158,
+      "cp_sat_common_insns": 64
     }
   ],
   "num_branch_sensitive": 0,
@@ -33,5 +39,33 @@
     "f_80009bf90",
     "f_801c1ed1c",
     "f_80009bf94"
-  ]
+  ],
+  "solver_backend": "OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver",
+  "longest_path_branch_policy": 0,
+  "common_path_branch_policy": 0,
+  "longest_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000",
+    "X2": "fbase + 0x3000",
+    "X3": "0xf (15)"
+  },
+  "common_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000",
+    "X2": "fbase + 0x3000"
+  },
+  "longest_path_stub_returns": {
+    "f_8004e7bd0": "0x0",
+    "f_8027e47f8": "0x0",
+    "f_80009bf90": "0x0",
+    "f_801c1ed1c": "0x0",
+    "f_80009bf94": "0x0"
+  },
+  "common_path_stub_returns": {
+    "f_8004e7bd0": "0x0",
+    "f_8027e47f8": "0x0",
+    "f_80009bf90": "0x0",
+    "f_801c1ed1c": "0x0",
+    "f_80009bf94": "0x0"
+  }
 }

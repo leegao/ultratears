@@ -33,6 +33,7 @@ using ResetFn = void (*)(uint32_t);
 using BenchModeFn = void (*)(int);
 using SetPolicyFn = void (*)(uint32_t);
 using GetU64Fn = uint64_t (*)(void);
+using ApplyPathParamsFn = void (*)(Cpu*, int, uint64_t);
 
 struct ObservedPathProfile {
     uint64_t signature = 0;
@@ -56,6 +57,7 @@ struct SharedModuleHandle {
     GetU64Fn stub_get_trace_hash = nullptr;
     GetU64Fn stub_get_call_count = nullptr;
     GetU64Fn stub_get_heap_ptr = nullptr;
+    ApplyPathParamsFn stub_apply_path_params = nullptr;
 
     bool load(const std::string& so_path, const std::vector<std::string>& fn_names);
     void close();

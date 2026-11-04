@@ -2,9 +2,9 @@
 
 ## 1. Function Static CFG & Path Length Summary
 
-| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `f_80029e418` | `0x80029e418` | 974 | 177 | 25 | 63 | 1832 |
+| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) | CP-SAT Verified Longest |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f_80029e418` | `0x80029e418` | 974 | 177 | 25 | 27 | 1832 | 1832 |
 
 ## 2. Function Control Flow Graphs (CFGs)
 
@@ -592,14 +592,14 @@ flowchart TD
     style B_80029f344 fill:#ffeedd,stroke:#e65100,stroke-width:2px,color:#bf360c
 ```
 
-## 3. External Callee Classification (28 total: 24 constant-zero, 0 pointer-alloc, 0 memory-copy, 4 branch-sensitive)
+## 3. External Callee Classification (28 total: 22 constant-zero, 1 pointer-alloc, 0 memory-copy, 5 branch-sensitive)
 
 | External Symbol | Classification | Args Read | Longest-Path Return (`X0`) | Alt-Branch Return (`X0`) | Post-Call Analysis |
 | :--- | :--- | ---: | :--- | :--- | :--- |
 | `f_800079d20` | **BRANCH_SENSITIVE** | 4 | `0x1` | `0x0` | CBZ on return register x0 at 0x80029e474 |
-| `f_8001a1590` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+| `f_8001a1590` | `POINTER_ALLOC` | 3 | `guest_alloc()` | `0x0` | Known heap allocator f_8001a1590 called at 0x80029e4a0 |
 | `f_80029f350` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
-| `f_800315c14` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+| `f_800315c14` | **BRANCH_SENSITIVE** | 2 | `0x1` | `0x0` | CBZ on return register x0 at 0x80029e548 |
 | `f_80029f86c` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8002a1318` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8002a58d8` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
@@ -624,3 +624,67 @@ flowchart TD
 | `f_801d290a0` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_800193210` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8009c79d0` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+
+## 4. Constraint-Solved Parameters for Maximal Finite & Common Paths
+
+### Function `f_80029e418` (`0x80029e418`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **1832 insns** (99 basic blocks) | **27 insns** (4 basic blocks) |
+| **Path Predicates Solved** | 69 branch/switch constraints | 2 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x2` | `0x1f` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Entry Register `X2`** | `0x0 (0)` | ``0x0`` |
+| **Stub Return `f_800079d20` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_800193210` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8001a1590` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_80029f350` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80029f86c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8002a1318` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8002a58d8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8002a77e8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8002a7968` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800315c14` (`X0`)** | `0x0 (policy bit #1=1)` | `0x0 (policy bit #1=1)` |
+| **Stub Return `f_8009c79d0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d28d50` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d28ec0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d28f28` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d28f90` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d290a0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d291c0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d29228` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d29290` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d29308` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d29374` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d293c8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_801d2a318` (`X0`)** | `0x0 (policy bit #3=0)` | `0x80000000 (policy bit #3=1)` |
+| **Stub Return `f_801d2a554` (`X0`)** | `0x0 (policy bit #4=0)` | `0x80000000 (policy bit #4=1)` |
+| **Stub Return `f_801d2a5c8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #2=0)` | `0x0 (policy bit #2=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba41d0` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x80029e420: MEM[X0+0x10] ne -1`
+- `0x80029e458: MEM[MEM[X1+0x28]+0x10] ge 1`
+- `0x80029e474: RET_f_800079d20 ne 0`
+- `0x80029e488: MEM[MEM[X1+0x28]+0x10] eq 1`
+- `0x80029e4c0: MEM[X0+0x18] != NULL (valid 64-bit pointer)`
+- `0x80029e4c8: MEM[MEM[X0+0x18]+0x150] eq 0`
+- `0x80029ea68: MEM[MEM[X1+0x38]+0x18] != NULL (valid 64-bit pointer)`
+- `0x80029ea74: bit #0 of MEM[MEM[X1+0x38]+0x18] == 0`
+- `0x80029f11c: RET_f_802ba39a0 ne 0`
+- `0x80029ea78: MEM[MEM[MEM[X1+0x38]+0x18]+0x150] != NULL (valid 64-bit pointer)`
+- `0x80029ea94: MEM[MEM[MEM[X1+0x38]+0x18]+0x150] != NULL (valid 64-bit pointer)`
+- `0x80029ea9c: MEM[MEM[X1+0x38]+0x18] != NULL (valid 64-bit pointer)`
+- `0x80029eabc: MEM[X0+0x18] != NULL (valid 64-bit pointer)`
+- `0x80029eacc: MEM[MEM[X0+0x18]+0x164] eq 1`
+- `0x80029f2f4: bit #0 of MEM[MEM[MEM[GLOBAL+0x80394cc20]+0x0]+0x18] == 1 -> MEM[MEM[MEM[GLOBAL+0x80394cc20]+0x0]+0x18] |= 0x1`
+- `0x80029f340: MEM[MEM[X0+0x18]+0x164] eq 1`
+- `0x80029e4d4: MEM[MEM[X1+0x28]+0x10] ne 0`
+- `0x80029e500: MEM[MEM[X0+0x28]+0x0] != NULL (valid 64-bit pointer)`
+- `0x80029e508: MEM[MEM[MEM[X0+0x28]+0x0]+0x8] != NULL (valid 64-bit pointer)`
+- `0x80029e528: MEM[MEM[X0+0x28]+0x0] != NULL (valid 64-bit pointer)`

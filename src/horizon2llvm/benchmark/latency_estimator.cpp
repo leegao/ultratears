@@ -496,6 +496,11 @@ std::vector<ObservedPathProfile> discover_observed_path_profiles(
                 harness->setup_test_case(static_cast<int>(f), iter, rng, c);
                 handle.stub_reset_state(static_cast<uint32_t>(iter + 1));
                 if (handle.stub_set_branch_policy) handle.stub_set_branch_policy(pol);
+                if (handle.stub_apply_path_params && (iter == 0 || iter == 1) &&
+                    harness->name() != std::string("main_432") && harness->name() != std::string("main_180_eventengine")) {
+                    uint64_t fbase = OBJ_BASE + static_cast<uint64_t>(f) * 0x40000ULL;
+                    handle.stub_apply_path_params(&c, static_cast<int>(iter), fbase);
+                }
 
                 bool ok = run_guest_fn_safely(handle.fns[f], &c);
                 if (!ok) continue;

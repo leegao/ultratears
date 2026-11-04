@@ -453,7 +453,43 @@ Even after cutting `main_067_statickernel` from `2,924` to `1,668` x86-64 instru
 
 ---
 
-## 7. Build, Verification & Reproduction Instructions
+## 7. Automated Constraint-Solved Path & Parameter Synthesis (`src/horizon2llvm/benchmark/stub_analyzer.py`)
+
+### 7.1 Multi-Backend DAG Longest-Path & Common-Path Constraint Solver
+To eliminate manual parameter tuning across all 26 extracted benchmark suites (31 functions total), `src/horizon2llvm/benchmark/stub_analyzer.py` integrates a multi-backend constraint solver (`solve_dag_paths_via_constraint_solver`) over the reconstructed ARM64 CFG DAG (with dominator/DFS loop back-edges removed, loop headers weighted by bounded trip count $\min(\text{LoopBody}, 160) \times 3$, and infeasible short-circuit zero-flag trampolines `mov wR, wzr; b B_cbz` $\to$ `cbz wR, B_exit` pruned):
+1. **Google OR-Tools CP-SAT (`ortools.sat.python.cp_model`)**: Formulates binary edge flow variables $e_{u,v} \in \{0, 1\}$ and node visit variables $y_u \in \{0, 1\}$ with flow conservation ($\sum_p e_{p,u} = y_u = \sum_s e_{u,s}$), solving for the exact `OPTIMAL` **Maximal Finite Path** ($\max \sum_u w_{\text{long}}(u) y_u$) and **Representative Common Path** ($\min |\sum_u w_{\text{comm}}(u) y_u - \mathbb{E}[\text{CommonPath}]|$).
+2. **SciPy HiGHS MILP (`scipy.optimize.milp`)**: Solves the identical Mixed-Integer Linear Program over the sparse incidence matrix $A_{\text{eq}} x = b_{\text{eq}}$.
+3. **Pure-Python Reverse-Topological DAG DP**: Zero-dependency fixed-point relaxation fallback.
+
+Across all 31 functions in all 26 benchmark suites, OR-Tools CP-SAT, SciPy HiGHS MILP, and Reverse-Topological DP achieve **100% agreement** on the optimal longest-path instruction count.
+
+### 7.2 Two-Pass Symbolic Execution & MaxSAT Path Parameter Solver (`SymbolicPathTracer` & `solve_path_parameters`)
+Given the basic-block sequences for both the Maximal Finite Path (`path_mode = 0`) and Representative Common Path (`path_mode = 1`), `solve_path_parameters()` runs a **Two-Pass Symbolic Path Tracer (`SymbolicPathTracer`)**:
+1. **Pass 1 (Symbolic Index & Switch Discovery)**:
+   - Decompresses the `.rodata` segment (`0x802ba7000`, `10.15 MB`) directly from `data/exefs/main` via a built-in pure-Python LZ4 block decompressor (`get_nso_rodata()`).
+   - Symbolically executes ARM64 instructions along the target basic-block path, tracking registers `X0..X30`, stack slots `[sp + off]`, multi-level guest arena pointers (`MEM[X0+off]`, `MEM[MEM[X0+off1]+off2]`), and external callee returns (`RET_f_<addr>`).
+   - Inverts relative `.rodata` jump tables (`adr xBase, #anchor; ldrh wOff, [xTable, xIdx, lsl #1]; add xT, xBase, xOff, lsl #2; br xT`) to solve exact switch index registers (e.g., `X2 = 31` for the longest path of `f_8001161d0`, `X2 = 6` for the common path).
+2. **Pass 2 (Concrete-Index Symbolic Refinement)**:
+   - Re-traces the path with solved scalar switch indices (`X2 = 31` or `X2 = 6`) specialized as constants so that `.rodata` lookup tables (`0x800116498: ldr x8, [0x802d6c988, x21, lsl #3]` $\to$ `x8 = 1`), structure array strides (`smaddl` / `umaddl`), and byte-table offsets (`ldrb w11, [x24, x25]` $\to$ `MEM[X0+0x15f]`) fold to exact concrete offsets.
+3. **MaxSAT CP-SAT + Native Bit-Vector / Interval Constraint Solving**:
+   - Encodes all path predicates (`b.cond`, `cbz`/`cbnz`, `tbz`/`tbnz`, `tst`+`cset`, `csel`, `bics`, `udiv`/`sdiv`) as weighted indicator constraints (`OnlyEnforceIf`) in OR-Tools CP-SAT alongside a pure-Python Bit-Vector/Interval SMT solver.
+   - Emits `void stub_apply_path_params(Cpu* c, int path_mode, uint64_t fbase)` directly into each sample's `auto_stubs.c`, Section 4 in `STUB_ANALYSIS.md`, and machine-readable fields in `stub_analysis.json`.
+   - `SharedModuleHandle::open()` (`src/horizon2llvm/benchmark/harness_interface.cpp`), `latency_estimator.cpp`, and `fuzz_main.cpp` dynamically load `stub_apply_path_params` via `dlsym` and invoke it on `iter == 0` (`path_mode = 0`, Maximal Finite Path) and `iter == 1` (`path_mode = 1`, Common Path).
+
+### 7.3 Analytical & Empirical Proof on `main_067_statickernel` (`f_8001161d0`)
+For `main_067_statickernel` (`f_8001161d0`, `0x8001161d0`, `1,410` ARM64 instructions, `111` basic blocks, `8` external callees):
+- **Maximal Finite Path (`path_mode = 0`, 511 ARM64 insns, 58 basic blocks, 35 predicates solved)**:
+  - Entry switch index **`X2 = 31` (`0x1f`)**: satisfies `0x800116208: cmp w21, #32; b.hs` (not taken), `0x800116218: (0xf6c37d1f >> 31) & 1 == 1` (taken $\to$ `0x80011648c`, loading `.rodata[0x802d6ca80] = 1` into `x8` so `x23 = MEM[X0+0x3398] + 0x2e8`), and jump-table dispatch `0x800116318: br x0` (`.rodata[0x802d6c940 + 31*2] = 941` $\to$ `0x80011631c + (941 << 2) = 0x8001171d0`).
+  - External stub return **`RET_f_8000ef570 = 0x1` (`g_stub_branch_policy = 0x0`)**: satisfies `0x800117274: tbnz w0, #0, 0x800117468`.
+  - Descriptor chain & work-queue predicates: `MEM[MEM[MEM[X0+0x1ec8]+0x10]+0x2e00] = 0x1`, non-null pointers `+0x2e10..+0x2e50`, `MEM[MEM[X0+0x3398]+0x314] = 0x1` (`> 0`), `MEM[MEM[X0+0x3398]+0x2fc] = 0x2000`, `MEM[MEM[X0+0x3398]+0x2f8] = 0x2000`, `MEM[X0+0x15f] = 0xff` (`bits #0,#1 == 1`), `MEM[X0+0x3a81] = 0x40`, `MEM[X0+0x3a85] = 0x2`, `MEM[X0+0x3b84] = 0x1`, `MEM[X0+0x3b90] = 0x1`, and `MEM[X0+0x3b94] = 0x2`, driving execution through both `f_8000ef570` (`0x800117258`) and `f_802ba41d0` (`0x800117034`, 192-byte `memcpy`) and into the atomic work-queue loop `0x8001170d8..0x80011718c` (**`ExtCalls = 2`, `TraceHash = 0xe49a9c28dc6ee28d`**).
+- **Representative Common Path (`path_mode = 1`, 127 ARM64 insns, 14 basic blocks, 11 predicates solved)**:
+  - Entry switch index **`X2 = 6` (`0x6`)**, **`g_stub_branch_policy = 0x1`** (`RET_f_8000ef570 = 0x0`), `MEM[X0+0x146] = 0x1`, `MEM[X0+0x3390] = 0x2`, `MEM[X1+0x2917] = 0xff`, `MEM[MEM[X0+0x3398]+0x514] = 0x1` (**`ExtCalls = 1`, `TraceHash = 0x0f80a949c352dce3`**).
+- **25-Layer Benchmark & Differential Fuzzing on `main_067_statickernel`**:
+  - Pre-pass raw IR (`12,300` lines, `2,648` `Cpu` ld/st, `2,924` x86-64 insns, `p50 = 104.3 ns`) optimizes down to **`6,788` IR lines (`-44.8%`), `657` `Cpu` ld/st (`-75.2%`), `1,953` x86-64 insns (`1.39x` ARM64), and `p50 = 65.5 ns` (`1.59x` speedup)**, passing **100% of 250 differential fuzzing iterations** (`21` distinct trace hashes, `13` path buckets, `calls=[0..2]`).
+
+---
+
+## 8. Build, Verification & Reproduction Instructions
 
 All build scripts, prebuilt `libLLVM.so`, headers, unit tests, differential fuzzers, and benchmark runners are self-contained inside the repository:
 

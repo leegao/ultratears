@@ -2,9 +2,9 @@
 
 ## 1. Function Static CFG & Path Length Summary
 
-| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `f_8002824a0` | `0x8002824a0` | 1266 | 370 | 54 | 152 | 7800 |
+| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) | CP-SAT Verified Longest |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f_8002824a0` | `0x8002824a0` | 1266 | 370 | 54 | 152 | 7800 | 7800 |
 
 ## 2. Function Control Flow Graphs (CFGs)
 
@@ -1486,3 +1486,41 @@ flowchart TD
 | :--- | :--- | ---: | :--- | :--- | :--- |
 | `f_8028e5c98` | **BRANCH_SENSITIVE** | 3 | `0x1` | `0x0` | TBZ bit #0 at 0x800282710 |
 | `f_8028e5e6c` | **BRANCH_SENSITIVE** | 2 | `0x0` | `0x80000000` | TBZ bit #31 at 0x800282ac8 |
+
+## 4. Constraint-Solved Parameters for Maximal Finite & Common Paths
+
+### Function `f_8002824a0` (`0x8002824a0`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **7800 insns** (90 basic blocks) | **152 insns** (31 basic blocks) |
+| **Path Predicates Solved** | 69 branch/switch constraints | 23 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0x3` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Entry Register `X2`** | `0x0 (0)` | `0x0 (0)` |
+| **Stub Return `f_8028e5c98` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_8028e5e6c` (`X0`)** | `0x0 (policy bit #1=0)` | `0x80000000 (policy bit #1=1)` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x80028250c: MEM[X0+0xe0] ne -1`
+- `0x8002825e8: MEM[X0+0xe4] eq 0`
+- `0x800282840: MEM[X0+0xc8] ne -1`
+- `0x800282864: MEM[X0+0xcc] eq 0`
+- `0x800282dd0: MEM[GLOBAL+0x0] ne 0`
+- `0x800282dd8: MEM[GLOBAL+0x0] eq MEM[MEM[X0+0xd8]+0x0]`
+- `0x800282c6c: MEM[X0+0xcc] eq 0`
+- `0x800282c74: MEM[MEM[X0+0x0]+0x0] != NULL (valid 64-bit pointer)`
+- `0x800282c7c: MEM[MEM[X0+0x0]+0x0] ge 2`
+- `0x800283080: MEM[GLOBAL+0x0] eq 0`
+- `0x800283090: MEM[GLOBAL+0x0] lo MEM[MEM[X0+0xd8]+0x0]`
+- `0x8002830a8: MEM[GLOBAL+0x0] ne MEM[MEM[X0+0xd8]+0x0]`
+- `0x8002830b0: MEM[GLOBAL+0x0] eq 0`
+- `0x800282e54: MEM[GLOBAL+0x0] ne 0`
+- `0x800282e5c: MEM[GLOBAL+0x0] eq MEM[MEM[X0+0xd8]+0x0]`
+- `0x800283548: MEM[X0+0xd8] ne 0`
+- `0x80028354c: bit #31 of MEM[X0+0xd8] == 1 -> MEM[X0+0xd8] |= 0x80000000`
+- `0x80028372c: MEM[GLOBAL+0x0] eq 0`
+- `0x80028374c: MEM[GLOBAL+0x0] eq 0`
+- `0x800283758: MEM[GLOBAL+0x1] eq 0`

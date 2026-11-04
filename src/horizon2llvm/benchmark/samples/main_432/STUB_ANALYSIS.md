@@ -2,13 +2,13 @@
 
 ## 1. Function Static CFG & Path Length Summary
 
-| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `f_80077bc00` | `0x80077bc00` | 127 | 1 | 0 | 134 | 134 |
-| `f_80077be18` | `0x80077be18` | 179 | 36 | 2 | 105 | 577 |
-| `f_80077c0e4` | `0x80077c0e4` | 39 | 10 | 1 | 32 | 76 |
-| `f_80077c180` | `0x80077c180` | 961 | 243 | 20 | 320 | 3424 |
-| `f_80077d084` | `0x80077d084` | 203 | 43 | 1 | 41 | 190 |
+| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) | CP-SAT Verified Longest |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f_80077bc00` | `0x80077bc00` | 127 | 1 | 0 | 134 | 134 | 134 |
+| `f_80077be18` | `0x80077be18` | 179 | 36 | 2 | 164 | 577 | 577 |
+| `f_80077c0e4` | `0x80077c0e4` | 39 | 10 | 1 | 41 | 76 | 76 |
+| `f_80077c180` | `0x80077c180` | 961 | 243 | 20 | 335 | 3424 | 3424 |
+| `f_80077d084` | `0x80077d084` | 203 | 43 | 1 | 46 | 190 | 190 |
 
 ## 2. Function Control Flow Graphs (CFGs)
 
@@ -1173,7 +1173,7 @@ flowchart TD
     style B_80077d358 fill:#e8f5e9,stroke:#2e7d32,stroke-width:3px,color:#1b5e20
 ```
 
-## 3. External Callee Classification (23 total: 14 constant-zero, 1 pointer-alloc, 0 memory-copy, 8 branch-sensitive)
+## 3. External Callee Classification (23 total: 13 constant-zero, 2 pointer-alloc, 0 memory-copy, 8 branch-sensitive)
 
 | External Symbol | Classification | Args Read | Longest-Path Return (`X0`) | Alt-Branch Return (`X0`) | Post-Call Analysis |
 | :--- | :--- | ---: | :--- | :--- | :--- |
@@ -1182,7 +1182,7 @@ flowchart TD
 | `f_800789c30` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_800b54d3c` | `CONSTANT_ZERO` | 5 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_800781d60` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
-| `f_8001a1590` | `POINTER_ALLOC` | 3 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x80077cc1c |
+| `f_8001a1590` | `POINTER_ALLOC` | 3 | `guest_alloc()` | `0x0` | Known heap allocator f_8001a1590 called at 0x80077bf6c |
 | `f_800079d20` | **BRANCH_SENSITIVE** | 4 | `0x1` | `0x0` | CBZ on return register x0 at 0x80077c028 |
 | `f_802ba39a0` | **BRANCH_SENSITIVE** | 2 | `0x1` | `0x0` | CBZ on return register w8 at 0x80077c0b4 |
 | `f_802ba39b0` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
@@ -1192,7 +1192,7 @@ flowchart TD
 | `f_802ba4a70` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_80077fee0` | `CONSTANT_ZERO` | 4 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_802ba4080` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
-| `f_8001a6c10` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+| `f_8001a6c10` | `POINTER_ALLOC` | 3 | `guest_alloc()` | `0x0` | Known heap allocator f_8001a6c10 called at 0x80077c2ac |
 | `f_80077d3b0` | `CONSTANT_ZERO` | 5 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_80077fec4` | **BRANCH_SENSITIVE** | 2 | `0x1` | `0x0` | CBNZ on return register x0 at 0x80077c404 |
 | `f_8001797dc` | **BRANCH_SENSITIVE** | 2 | `0x1` | `0x0` | CBZ on return register x0 at 0x80077cd24 |
@@ -1200,3 +1200,238 @@ flowchart TD
 | `f_8002152a0` | **BRANCH_SENSITIVE** | 2 | `0x1` | `0x0` | CBZ on return register x0 at 0x80077cdb0 |
 | `f_802ba3ac0` | **BRANCH_SENSITIVE** | 2 | `0x0` | `0x1` | CBZ on return register x0 at 0x80077cef8 |
 | `f_8027d342c` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+
+## 4. Constraint-Solved Parameters for Maximal Finite & Common Paths
+
+### Function `f_80077bc00` (`0x80077bc00`) — Solver Backend: `Python Native Symbolic BV/Interval Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **134 insns** (1 basic blocks) | **134 insns** (1 basic blocks) |
+| **Path Predicates Solved** | 0 branch/switch constraints | 0 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0xff` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Stub Return `f_8000340bc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800079d20` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_8001797dc` (`X0`)** | `0x1 (policy bit #4=0)` | `0x0 (policy bit #4=1)` |
+| **Stub Return `f_8001a1590` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8001a6c10` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8002152a0` (`X0`)** | `0x1 (policy bit #6=0)` | `0x0 (policy bit #6=1)` |
+| **Stub Return `f_8003f9d50` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077d3b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077fec4` (`X0`)** | `0x1 (policy bit #3=0)` | `0x0 (policy bit #3=1)` |
+| **Stub Return `f_80077fee0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800781d60` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800789c30` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80084d7f0` (`X0`)** | `0x1 (policy bit #5=0)` | `0x0 (policy bit #5=1)` |
+| **Stub Return `f_800b54d3c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027d342c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #1=0)` | `0x0 (policy bit #1=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba3ac0` (`X0`)** | `0x0 (policy bit #7=0)` | `0x1 (policy bit #7=1)` |
+| **Stub Return `f_802ba4080` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba40a0` (`X0`)** | `0x0 (policy bit #2=0)` | `0x1 (policy bit #2=1)` |
+| **Stub Return `f_802ba40b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba41b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4a70` (`X0`)** | `0x0` | `0x0` |
+
+### Function `f_80077be18` (`0x80077be18`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **577 insns** (35 basic blocks) | **164 insns** (6 basic blocks) |
+| **Path Predicates Solved** | 26 branch/switch constraints | 4 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0xff` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Entry Register `X2`** | `0x2 (2)` | ``0x0`` |
+| **Stub Return `f_8000340bc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800079d20` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_8001797dc` (`X0`)** | `0x1 (policy bit #4=0)` | `0x0 (policy bit #4=1)` |
+| **Stub Return `f_8001a1590` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8001a6c10` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8002152a0` (`X0`)** | `0x1 (policy bit #6=0)` | `0x0 (policy bit #6=1)` |
+| **Stub Return `f_8003f9d50` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077d3b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077fec4` (`X0`)** | `0x1 (policy bit #3=0)` | `0x0 (policy bit #3=1)` |
+| **Stub Return `f_80077fee0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800781d60` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800789c30` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80084d7f0` (`X0`)** | `0x1 (policy bit #5=0)` | `0x0 (policy bit #5=1)` |
+| **Stub Return `f_800b54d3c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027d342c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #1=0)` | `0x0 (policy bit #1=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba3ac0` (`X0`)** | `0x0 (policy bit #7=0)` | `0x1 (policy bit #7=1)` |
+| **Stub Return `f_802ba4080` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba40a0` (`X0`)** | `0x0 (policy bit #2=0)` | `0x1 (policy bit #2=1)` |
+| **Stub Return `f_802ba40b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba41b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4a70` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x80077be44: MEM[X0+0x68] ge 1`
+- `0x80077be88: bit #1 of MEM[MEM[X0+0x70]+0x30] == 1 -> MEM[MEM[X0+0x70]+0x30] |= 0x2`
+- `0x80077be98: csel arm X1 >= 2`
+- `0x80077be98: csel arm X2 >= 2`
+- `0x80077bea0: bit #1 of MEM[MEM[X0+0x70]+0x0] == 1 -> MEM[MEM[X0+0x70]+0x0] |= 0x2`
+- `0x80077bea8: MEM[MEM[X0+0x70]+0x18] != NULL (valid 64-bit pointer)`
+- `0x80077beb4: MEM[MEM[X0+0x70]+0x10] ne 1`
+- `0x80077bec0: MEM[MEM[X0+0x70]+0x8] != NULL (valid 64-bit pointer)`
+- `0x80077becc: MEM[MEM[MEM[X0+0x70]+0x8]+0xd2] hs 2`
+- `0x80077bed4: MEM[MEM[MEM[X0+0x70]+0x8]+0xd2] eq 6`
+- `0x80077bee4: MEM[MEM[MEM[X0+0x70]+0x8]+0xd2] ne 1`
+- `0x80077bef0: MEM[MEM[MEM[X0+0x70]+0x8]+0xc] ne 7`
+- `0x80077bef8: bit #3 of MEM[MEM[X0+0x70]+0x0] == 1 -> MEM[MEM[X0+0x70]+0x0] |= 0x8`
+- `0x80077bf00: MEM[MEM[X0+0x70]+0x8] != NULL (valid 64-bit pointer)`
+- `0x80077bf10: MEM[MEM[MEM[X0+0x70]+0x8]+0xc] ne 14`
+- `0x80077bf1c: MEM[MEM[MEM[X0+0x70]+0x8]+0xc] eq 8`
+- `0x80077bf20: MEM[MEM[MEM[X0+0x70]+0x8]+0x28] != NULL (valid 64-bit pointer)`
+- `0x80077bf28: bit #4 of MEM[MEM[MEM[X0+0x70]+0x8]+0x4] == 1 -> MEM[MEM[MEM[X0+0x70]+0x8]+0x4] |= 0x10`
+- `0x80077bf3c: bit #0 of MEM[GLOBAL+0x80394cd40] == 0`
+- `0x80077c0b4: RET_f_802ba39a0 ne 0`
+
+### Function `f_80077c0e4` (`0x80077c0e4`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **76 insns** (9 basic blocks) | **41 insns** (6 basic blocks) |
+| **Path Predicates Solved** | 5 branch/switch constraints | 4 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0xff` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Stub Return `f_8000340bc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800079d20` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_8001797dc` (`X0`)** | `0x1 (policy bit #4=0)` | `0x0 (policy bit #4=1)` |
+| **Stub Return `f_8001a1590` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8001a6c10` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8002152a0` (`X0`)** | `0x1 (policy bit #6=0)` | `0x0 (policy bit #6=1)` |
+| **Stub Return `f_8003f9d50` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077d3b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077fec4` (`X0`)** | `0x1 (policy bit #3=0)` | `0x0 (policy bit #3=1)` |
+| **Stub Return `f_80077fee0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800781d60` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800789c30` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80084d7f0` (`X0`)** | `0x1 (policy bit #5=0)` | `0x0 (policy bit #5=1)` |
+| **Stub Return `f_800b54d3c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027d342c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #1=0)` | `0x0 (policy bit #1=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba3ac0` (`X0`)** | `0x0 (policy bit #7=0)` | `0x1 (policy bit #7=1)` |
+| **Stub Return `f_802ba4080` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba40a0` (`X0`)** | `0x0 (policy bit #2=0)` | `0x1 (policy bit #2=1)` |
+| **Stub Return `f_802ba40b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba41b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4a70` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x80077c100: bit #0 of RET_f_802ba40a0 == 0`
+- `0x80077c118: MEM[MEM[X0+0x20]+0x40] ne 0`
+- `0x80077c130: MEM[MEM[MEM[X0+0x20]+0x10]+0xa8] != NULL (valid 64-bit pointer)`
+- `0x80077c13c: bit #0 of RET_f_802ba40a0_2 == 0`
+- `0x80077c154: MEM[MEM[X0+0x20]+0x40] eq 256`
+
+### Function `f_80077c180` (`0x80077c180`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **3424 insns** (197 basic blocks) | **335 insns** (16 basic blocks) |
+| **Path Predicates Solved** | 140 branch/switch constraints | 10 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x78` | `0xff` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Stub Return `f_8000340bc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800079d20` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_8001797dc` (`X0`)** | `0x0 (policy bit #4=1)` | `0x0 (policy bit #4=1)` |
+| **Stub Return `f_8001a1590` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8001a6c10` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8002152a0` (`X0`)** | `0x0 (policy bit #6=1)` | `0x0 (policy bit #6=1)` |
+| **Stub Return `f_8003f9d50` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077d3b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077fec4` (`X0`)** | `0x0 (policy bit #3=1)` | `0x0 (policy bit #3=1)` |
+| **Stub Return `f_80077fee0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800781d60` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800789c30` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80084d7f0` (`X0`)** | `0x0 (policy bit #5=1)` | `0x0 (policy bit #5=1)` |
+| **Stub Return `f_800b54d3c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027d342c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #1=0)` | `0x0 (policy bit #1=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba3ac0` (`X0`)** | `0x0 (policy bit #7=0)` | `0x1 (policy bit #7=1)` |
+| **Stub Return `f_802ba4080` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba40a0` (`X0`)** | `0x0 (policy bit #2=0)` | `0x1 (policy bit #2=1)` |
+| **Stub Return `f_802ba40b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba41b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4a70` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x80077c214: MEM[MEM[X0+0x10]+0x40] ne 0`
+- `0x80077c2cc: MEM[MEM[MEM[X0+0x10]+0x10]+0xe8] ne 0`
+- `0x80077c320: MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0] eq 0`
+- `0x80077ce6c: MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0] eq 0`
+- `0x80077ce78: MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0] eq 0`
+- `0x80077c328: MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78] != NULL (valid 64-bit pointer)`
+- `0x80077c330: MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x0] != NULL (valid 64-bit pointer)`
+- `0x80077c338: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x0]+0x58] != NULL (valid 64-bit pointer)`
+- `0x80077cf70: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x0]+0x58]+0x18] eq 0`
+- `0x80077c340: MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x8] != NULL (valid 64-bit pointer)`
+- `0x80077ce8c: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x8]+0x58] != NULL (valid 64-bit pointer)`
+- `0x80077ce94: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x8]+0x58]+0x18] eq 0`
+- `0x80077c348: MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x10] != NULL (valid 64-bit pointer)`
+- `0x80077cea0: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x10]+0x58] != NULL (valid 64-bit pointer)`
+- `0x80077cea8: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x10]+0x58]+0x18] eq 0`
+- `0x80077c350: MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x18] != NULL (valid 64-bit pointer)`
+- `0x80077ceb4: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x18]+0x58] != NULL (valid 64-bit pointer)`
+- `0x80077cebc: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x18]+0x58]+0x18] eq 0`
+- `0x80077c358: MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x20] != NULL (valid 64-bit pointer)`
+- `0x80077c360: MEM[MEM[MEM[MEM[MEM[MEM[MEM[MEM[X0+0x10]+0x10]+0x88]+0x20]+0x0]+0x78]+0x20]+0x58] != NULL (valid 64-bit pointer)`
+
+### Function `f_80077d084` (`0x80077d084`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **190 insns** (18 basic blocks) | **46 insns** (3 basic blocks) |
+| **Path Predicates Solved** | 10 branch/switch constraints | 2 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0xff` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Entry Register `X2`** | `fbase + 0x3000` | `fbase + 0x3000` |
+| **Stub Return `f_8000340bc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800079d20` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_8001797dc` (`X0`)** | `0x1 (policy bit #4=0)` | `0x0 (policy bit #4=1)` |
+| **Stub Return `f_8001a1590` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8001a6c10` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8002152a0` (`X0`)** | `0x1 (policy bit #6=0)` | `0x0 (policy bit #6=1)` |
+| **Stub Return `f_8003f9d50` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077d3b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80077fec4` (`X0`)** | `0x1 (policy bit #3=0)` | `0x0 (policy bit #3=1)` |
+| **Stub Return `f_80077fee0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800781d60` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_800789c30` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80084d7f0` (`X0`)** | `0x1 (policy bit #5=0)` | `0x0 (policy bit #5=1)` |
+| **Stub Return `f_800b54d3c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027d342c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #1=0)` | `0x0 (policy bit #1=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba3ac0` (`X0`)** | `0x0 (policy bit #7=0)` | `0x1 (policy bit #7=1)` |
+| **Stub Return `f_802ba4080` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba40a0` (`X0`)** | `0x0 (policy bit #2=0)` | `0x1 (policy bit #2=1)` |
+| **Stub Return `f_802ba40b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba41b0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba4a70` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x80077d0ac: MEM[X2+0x8] ne 2`
+- `0x80077d0b4: bit #0 of MEM[OBJ_ANON+0x10] == 0`
+- `0x80077d0dc: MEM[OBJ_ANON+0x0] != NULL (valid 64-bit pointer)`
+- `0x80077d0e4: bit #0 of MEM[MEM[OBJ_ANON+0x0]+0x10] == 1 -> MEM[MEM[OBJ_ANON+0x0]+0x10] |= 0x1`
+- `0x80077d170: bit #0 of MEM[X2+0x0] == 1 -> MEM[X2+0x0] |= 0x1`
+- `0x80077d180: MEM[MEM[OBJ_ANON+0x8]+0x0] != NULL (valid 64-bit pointer)`
+- `0x80077d1a8: (MEM[OBJ_ANON+0x10] & 0xfffffffffffffffe) != 0 -> MEM[OBJ_ANON+0x10] |= 0xfffffffffffffffe`
+- `0x80077d1f0: MEM[MEM[OBJ_ANON+0x8]+0x8] != NULL (valid 64-bit pointer)`
+- `0x80077d30c: (MEM[OBJ_ANON+0x8] & 0xfffffffffffffffe) != 0 -> MEM[OBJ_ANON+0x8] |= 0xfffffffffffffffe`

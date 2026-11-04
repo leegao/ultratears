@@ -2,9 +2,9 @@
 
 ## 1. Function Static CFG & Path Length Summary
 
-| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `f_8000dbae0` | `0x8000dbae0` | 2144 | 369 | 9 | 91 | 2486 |
+| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) | CP-SAT Verified Longest |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f_8000dbae0` | `0x8000dbae0` | 2144 | 369 | 9 | 91 | 2486 | 2486 |
 
 ## 2. Function Control Flow Graphs (CFGs)
 
@@ -1214,8 +1214,54 @@ flowchart TD
 | `f_80283fa6c` | `CONSTANT_ZERO` | 4 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_80283e894` | `CONSTANT_ZERO` | 6 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_80283afac` | `CONSTANT_ZERO` | 4 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
-| `f_80283e54c` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8000dca54 |
+| `f_80283e54c` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8000dca40 |
 | `f_8027d3594` | `CONSTANT_ZERO` | 5 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8007ef2c0` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8001ebdfc` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_80021b4ac` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+
+## 4. Constraint-Solved Parameters for Maximal Finite & Common Paths
+
+### Function `f_8000dbae0` (`0x8000dbae0`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **2486 insns** (245 basic blocks) | **91 insns** (20 basic blocks) |
+| **Path Predicates Solved** | 164 branch/switch constraints | 13 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0x0` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Entry Register `X2`** | `0x0 (0)` | ``0x0`` |
+| **Stub Return `f_8000a4db4` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8001ebdfc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80021b4ac` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8007ef2c0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8027d3594` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80283afac` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80283e54c` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_80283e894` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80283fa6c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba41d0` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x8000dbb10: MEM[X0+0x45] eq 255`
+- `0x8000dbb2c: MEM[X1+0x2f] eq -1`
+- `0x8000dbb40: MEM[MEM[GLOBAL+0x80395e370]+0x0] != NULL (valid 64-bit pointer)`
+- `0x8000dbb48: MEM[MEM[MEM[GLOBAL+0x80395e370]+0x0]+0x0] != NULL (valid 64-bit pointer)`
+- `0x8000dbb64: MEM[X0+0x3d] ne MEM[X1+0x46]`
+- `0x8000dbb80: bit #11 of MEM[X0+0x40] == 1 -> MEM[X0+0x40] |= 0x800`
+- `0x8000dbb9c: bit #0 of MEM[X0+0x19d] == 0`
+- `0x8000dbc34: bit #0 of MEM[X0+0x40] == 1 -> MEM[X0+0x40] |= 0x1`
+- `0x8000dbe6c: MEM[X0+0xa0] ne MEM[MEM[X1+0x68]+0x180]`
+- `0x8000dbe88: MEM[MEM[X1+0x68]+0x189] ne 2`
+- `0x8000dcaf8: MEM[MEM[X1+0x68]+0x189] eq 5`
+- `0x8000dbe90: MEM[MEM[X1+0x68]+0x104] ne 0`
+- `0x8000dc330: MEM[MEM[X1+0x68]+0x189] eq 5`
+- `0x8000dc340: MEM[MEM[X1+0x68]+0x189] eq 5`
+- `0x8000dc350: MEM[MEM[X1+0x68]+0x189] eq 5`
+- `0x8000dc360: MEM[MEM[X1+0x68]+0x189] ne 5`
+- `0x8000dc378: bit #15 of MEM[X0+0x0] == 0`
+- `0x8000dc3a0: MEM[MEM[X1+0x68]+0x128] eq MEM[X0+0x158]`
+- `0x8000dc3ac: MEM[MEM[X1+0x68]+0x12a] eq MEM[X0+0x15a]`
+- `0x8000dcabc: MEM[MEM[X1+0x68]+0x129] eq MEM[X0+0x159]`

@@ -139,6 +139,9 @@ static int run_single_sample_fuzz(
             harness->setup_test_case(static_cast<int>(f), iter, rng_raw, cpu_raw);
             h_raw.stub_reset_state(static_cast<uint32_t>(iter + 1));
             if (h_raw.stub_set_branch_policy) h_raw.stub_set_branch_policy(policy);
+            if (f == 0 && (iter == 0 || iter == 1) && h_raw.stub_apply_path_params) {
+                h_raw.stub_apply_path_params(&cpu_raw, static_cast<int>(iter), OBJ_BASE);
+            }
             bool ok_raw = run_guest_fn_safely(h_raw.fns[f], &cpu_raw);
             uint64_t hash_raw  = h_raw.stub_get_trace_hash();
             uint64_t calls_raw = h_raw.stub_get_call_count();
@@ -151,6 +154,9 @@ static int run_single_sample_fuzz(
             harness->setup_test_case(static_cast<int>(f), iter, rng_safe, cpu_safe);
             h_safe.stub_reset_state(static_cast<uint32_t>(iter + 1));
             if (h_safe.stub_set_branch_policy) h_safe.stub_set_branch_policy(policy);
+            if (f == 0 && (iter == 0 || iter == 1) && h_safe.stub_apply_path_params) {
+                h_safe.stub_apply_path_params(&cpu_safe, static_cast<int>(iter), OBJ_BASE);
+            }
             bool ok_safe = run_guest_fn_safely(h_safe.fns[f], &cpu_safe);
             uint64_t hash_safe  = h_safe.stub_get_trace_hash();
             uint64_t calls_safe = h_safe.stub_get_call_count();
@@ -163,6 +169,9 @@ static int run_single_sample_fuzz(
             harness->setup_test_case(static_cast<int>(f), iter, rng_all, cpu_all);
             h_all.stub_reset_state(static_cast<uint32_t>(iter + 1));
             if (h_all.stub_set_branch_policy) h_all.stub_set_branch_policy(policy);
+            if (f == 0 && (iter == 0 || iter == 1) && h_all.stub_apply_path_params) {
+                h_all.stub_apply_path_params(&cpu_all, static_cast<int>(iter), OBJ_BASE);
+            }
             bool ok_all = run_guest_fn_safely(h_all.fns[f], &cpu_all);
             uint64_t hash_all  = h_all.stub_get_trace_hash();
             uint64_t calls_all = h_all.stub_get_call_count();

@@ -3,21 +3,25 @@
   "total_arm64_insns": 2149,
   "total_common_path_insns": 616,
   "total_longest_path_insns": 3098,
+  "total_basic_blocks": 427,
+  "total_back_edges": 31,
   "functions": [
     {
       "name": "f_8001e8260",
-      "entry_pc": 34361737824,
+      "entry_pc": "0x8001e8260",
       "static_insns": 2149,
       "basic_blocks": 427,
       "back_edges": 31,
       "common_path_insns": 616,
-      "longest_path_insns": 3098
+      "longest_path_insns": 3098,
+      "cp_sat_longest_insns": 3098,
+      "cp_sat_common_insns": 616
     }
   ],
   "num_branch_sensitive": 3,
-  "num_pointer_alloc": 0,
+  "num_pointer_alloc": 1,
   "num_memory_copy": 0,
-  "num_constant_zero": 20,
+  "num_constant_zero": 19,
   "external_stubs": [
     "f_802ba4060",
     "f_802ba4070",
@@ -42,5 +46,70 @@
     "f_8027cf74c",
     "f_8027cf000",
     "f_802ba3ad0"
-  ]
+  ],
+  "solver_backend": "OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver",
+  "longest_path_branch_policy": 0,
+  "common_path_branch_policy": 6,
+  "longest_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000",
+    "X2": "fbase + 0x3000",
+    "X3": "0x1 (1)"
+  },
+  "common_path_registers": {
+    "X0": "fbase + 0x1000",
+    "X1": "fbase + 0x2000",
+    "X2": "fbase + 0x3000",
+    "X3": "0x1 (1)"
+  },
+  "longest_path_stub_returns": {
+    "f_802ba4060": "0x0",
+    "f_802ba4070": "0x0",
+    "f_8001eec40": "0x0",
+    "f_8001ea404": "0x0",
+    "f_8027e540c": "0x0",
+    "f_802ba4180": "0x0",
+    "f_802ba41d0": "0x0",
+    "f_802ba3ac0": "0x0 (policy bit #0=0)",
+    "f_8001eef84": "0x1 (policy bit #1=0)",
+    "f_80003340c": "0x0",
+    "f_8001a1590": "guest_alloc(128)",
+    "f_8008d94d8": "0x0",
+    "f_802809130": "0x0 (policy bit #2=0)",
+    "f_8028011e4": "0x0",
+    "f_8027e4e10": "0x0",
+    "f_802809bb4": "0x0",
+    "f_802809b18": "0x0",
+    "f_802809600": "0x0",
+    "f_802801134": "0x0",
+    "f_8027cf27c": "0x0",
+    "f_8027cf74c": "0x0",
+    "f_8027cf000": "0x0",
+    "f_802ba3ad0": "0x0"
+  },
+  "common_path_stub_returns": {
+    "f_802ba4060": "0x0",
+    "f_802ba4070": "0x0",
+    "f_8001eec40": "0x0",
+    "f_8001ea404": "0x0",
+    "f_8027e540c": "0x0",
+    "f_802ba4180": "0x0",
+    "f_802ba41d0": "0x0",
+    "f_802ba3ac0": "0x0 (policy bit #0=0)",
+    "f_8001eef84": "0x0 (policy bit #1=1)",
+    "f_80003340c": "0x0",
+    "f_8001a1590": "guest_alloc(128)",
+    "f_8008d94d8": "0x0",
+    "f_802809130": "0x1 (policy bit #2=1)",
+    "f_8028011e4": "0x0",
+    "f_8027e4e10": "0x0",
+    "f_802809bb4": "0x0",
+    "f_802809b18": "0x0",
+    "f_802809600": "0x0",
+    "f_802801134": "0x0",
+    "f_8027cf27c": "0x0",
+    "f_8027cf74c": "0x0",
+    "f_8027cf000": "0x0",
+    "f_802ba3ad0": "0x0"
+  }
 }

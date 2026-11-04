@@ -53,34 +53,42 @@ graph LR
 
 ---
 
-## 3. Modular Target-Specific Setup Functions
+## 3. Modular Target-Specific Setup Functions & Constraint Parameter Precedence
 
-While the acyclic node pool handles 95% of generic guest functions, specific high-performance subroutines check specialized entry invariants (e.g. alignment masks, SIMD descriptors, vtables). These setups are encapsulated in modular static helper functions:
+UltraTears employs a hybrid initialization strategy balancing automated constraint satisfaction with handwritten domain-specific setups:
 
-### 3.1 `setup_target_main_105_alloc`
+### 3.0 Automated Constraint Parameter Precedence
+For the vast majority of microbenchmarks, `stub_analyzer.py` synthesizes `stub_apply_path_params(Cpu* c, int path_mode, uint64_t fbase)` directly in `auto_stubs.c`. This routine writes constraint-solved entry register values (`X0..X7`), required guest arena memory words, and branch policy bitmasks for the longest DAG path (`path_mode = 0`) or common DAG path (`path_mode = 1`).
+
+In `generic_harness.cpp`, if `stub_apply_path_params` is linked and the sample does not require specialized multi-function descriptor graphs, the harness executes `stub_apply_path_params` during each iteration state preparation.
+
+### 3.1 Specialized Multi-Function Kernels & Complex Graph Topologies
+While the acyclic node pool and automated constraint solver handle generic guest functions, certain high-performance subroutines check specialized multi-function invariants (e.g. cross-function descriptor trees, red-black tree rebalancing pointers, SIMD descriptors, vtables). These setups are encapsulated in modular static helper functions in `generic_harness.cpp`:
+
+#### `setup_target_main_105_alloc`
 - Targets entry `0x8001a1590` (heap/slab allocator).
 - Populates object sizes in `X0` (32 to 1024 bytes) and alignment requirements in `W2` (8 to 64 bytes).
 - Configures vtable slot `[x8 + 48]` to toggle between the TLS fast-path allocator (`0x80060add0`) and generic slab allocation.
 
-### 3.2 `setup_target_main_121_simd`
+#### `setup_target_main_121_simd`
 - Targets entry `0x8001d2a5c` (SIMD vector operations).
 - Builds 8-entry descriptor tables with 24-byte strides containing element counts, stride intervals, and vector lane parameters.
 
-### 3.3 `setup_target_main_300_bvhtree`
+#### `setup_target_main_300_bvhtree`
 - Targets entries `0x8004e71b0` and `0x8004e8eec` (bounding volume hierarchy traversal).
 - Populates 4-wide floating-point vectors (`[min_x, min_y, min_z, max_x, ...]`) and node bitmask words (`0x7`) to satisfy `bics wzr, #6, w9` branch guards.
 
-### 3.4 `setup_target_main_159_dispatch`
+#### `setup_target_main_159_dispatch`
 - Targets entry `0x8002824a0` (event/message dispatcher).
 - Populates dispatch table header words at offsets `+200`, `+204`, and `+224`.
 
-### 3.5 `setup_target_main_163_actor`
+#### `setup_target_main_163_actor`
 - Targets entry `0x80029e418` (actor component update step).
 - Initializes actor component arrays and zeros optional trailing component pointers.
 
-### 3.6 `setup_target_main_432`
+#### `setup_target_main_432`
 - Targets complex kernel functions `f_80077bc00` through `f_80077d084`.
-- Generates shared inner descriptor arrays (`shared_desc_arr`) and valid 3-level red-black tree structures with grandfather, parent, uncle, and child node pointers for tree rebalancing validation.
+- Because sample 432 benchmarks 5 tightly coupled routines that mutate a shared object tree, `setup_target_main_432` generates shared inner descriptor arrays (`shared_desc_arr`) and valid 3-level red-black tree structures with grandfather, parent, uncle, and child node pointers for tree rebalancing validation. This handwritten topology takes precedence over single-function stubs to prevent null pointer dereferences across function boundaries.
 
 ---
 

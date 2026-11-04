@@ -2,9 +2,9 @@
 
 ## 1. Function Static CFG & Path Length Summary
 
-| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) |
-| :--- | :--- | ---: | ---: | ---: | ---: | ---: |
-| `f_8021c31d4` | `0x8021c31d4` | 1122 | 345 | 21 | 45 | 500 |
+| Function | Entry PC | Static ARM64 Insns | Basic Blocks | Loop Back-Edges | Est. Common Path (ARM64 Insns) | Est. Longest Path (ARM64 Insns) | CP-SAT Verified Longest |
+| :--- | :--- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `f_8021c31d4` | `0x8021c31d4` | 1122 | 345 | 21 | 45 | 500 | 500 |
 
 ## 2. Function Control Flow Graphs (CFGs)
 
@@ -1038,14 +1038,71 @@ flowchart TD
 | `f_8021b69a4` | `CONSTANT_ZERO` | 3 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8021ac220` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8021ac1cc` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c3df8 |
-| `f_8021a1648` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c3ed8 |
+| `f_8021a1648` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c3e90 |
 | `f_8021a53d8` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8021a5354` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8021a4594` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_8021a1390` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c4000 |
-| `f_8021a1408` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c4114 |
-| `f_8021a1318` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c4228 |
+| `f_8021a1408` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c40cc |
+| `f_8021a1318` | `POINTER_ALLOC` | 2 | `guest_alloc()` | `0x0` | Return value dereferenced as pointer at 0x8021c41d8 |
 | `f_8021968bc` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_80219699c` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_802196a0c` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
 | `f_802196a7c` | `CONSTANT_ZERO` | 2 | `0x0` | `0x1` | Return value X0 unread/overwritten -> constant 0 |
+
+## 4. Constraint-Solved Parameters for Maximal Finite & Common Paths
+
+### Function `f_8021c31d4` (`0x8021c31d4`) — Solver Backend: `OR-Tools CP-SAT MaxSAT (OPTIMAL) + Native BV Solver`
+
+| Parameter / Attribute | Maximal Finite Path (`path_mode = 0`) | Common Path (`path_mode = 1`) |
+| :--- | :--- | :--- |
+| **Static ARM64 Instructions** | **500 insns** (61 basic blocks) | **45 insns** (13 basic blocks) |
+| **Path Predicates Solved** | 49 branch/switch constraints | 9 branch/switch constraints |
+| **`g_stub_branch_policy`** | `0x0` | `0x1` |
+| **Entry Register `X0`** | `fbase + 0x1000` | `fbase + 0x1000` |
+| **Entry Register `X1`** | `fbase + 0x2000` | `fbase + 0x2000` |
+| **Entry Register `X2`** | `0x0 (0)` | ``0x0`` |
+| **Stub Return `f_8006ad38c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8006aec40` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021968bc` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_80219699c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802196a0c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802196a7c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021a0e4c` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021a1318` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8021a1390` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8021a1408` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8021a1648` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8021a4594` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021a5128` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021a52d0` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021a5354` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021a53d8` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021ac1cc` (`X0`)** | `guest_alloc(128)` | `guest_alloc(128)` |
+| **Stub Return `f_8021ac220` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_8021b69a4` (`X0`)** | `0x0` | `0x0` |
+| **Stub Return `f_802ba39a0` (`X0`)** | `0x1 (policy bit #0=0)` | `0x0 (policy bit #0=1)` |
+| **Stub Return `f_802ba39b0` (`X0`)** | `0x0` | `0x0` |
+
+#### Extracted Maximal-Path Predicate Constraints:
+
+- `0x8021c3210: MEM[X0+0x90] != NULL (valid 64-bit pointer)`
+- `0x8021c3218: MEM[X0+0x98] != NULL (valid 64-bit pointer)`
+- `0x8021c3220: MEM[X0+0xa0] != NULL (valid 64-bit pointer)`
+- `0x8021c3228: X1 ne 51`
+- `0x8021c3234: MEM[X0+0x38] != NULL (valid 64-bit pointer)`
+- `0x8021c3cf0: MEM[MEM[X0+0x38]+0x150] eq 0`
+- `0x8021c323c: X1 ls 21`
+- `0x8021c325c: MEM[X0+0x30] eq 0`
+- `0x8021c3280: X1 ne 21`
+- `0x8021c3288: X1 ne 20`
+- `0x8021c3290: X1 eq 9`
+- `0x8021c350c: bit #0 of MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x3c] == 0`
+- `0x8021c3514: MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x10] != NULL (valid 64-bit pointer)`
+- `0x8021c37b4: MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x18] != NULL (valid 64-bit pointer)`
+- `0x8021c37c4: MEM[MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x18]+0xc] eq MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x20]`
+- `0x8021c37cc: MEM[MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x18]+0x0] != NULL (valid 64-bit pointer)`
+- `0x8021c37e8: MEM[MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x18]+0x0] != NULL (valid 64-bit pointer)`
+- `0x8021c37f4: bit #0 of MEM[MEM[MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x18]+0x0]+0x3c] == 1 -> MEM[MEM[MEM[MEM[MEM[MEM[X0+0x90]+0x1e0]+0x150]+0x18]+0x0]+0x3c] |= 0x1`
+- `0x8021c32f0: X1 le 37`
+- `0x8021c3610: bit #0 of MEM[MEM[MEM[X0+0x8]+0x150]+0x80] == 0`

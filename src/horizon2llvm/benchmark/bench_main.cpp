@@ -769,5 +769,9 @@ int main(int argc, char** argv) {
     std::printf("\n>>> Benchmark Complete for %s: Raw/NoOpt=%.1fns -> All=%.1fns (Speedup p50: %.2fx, x86/ARM ratio: %.2fx) <<<\n",
                 ctx.chunk_stem.c_str(), noopt_row->lat.p50_ns, all_row->lat.p50_ns, speedup_all, all_row->ratio_vs_arm64);
 
-    return 0;
+    // Flush standard streams and immediately terminate via std::_Exit(0).
+    // Avoids hangs and deadlocks during process teardown caused by static destructors
+    // in LLVM backends, thread local cleanup, and dlopened JIT shared libraries.
+    std::fflush(stdout);
+    std::_Exit(0);
 }

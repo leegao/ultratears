@@ -24,6 +24,24 @@ def get_all_suites(bench_root):
                 # Disabled in --all-samples: f_8002824a0 is an internal event-dispatch
                 # traversal loop (~4.5s per iteration); tested and benchmarked separately.
                 continue
+            # if entry == "main_180_eventengine":
+            #     # Disabled in --all-samples: f_8002d8e30 infinite loops
+            #     continue
+            # if entry == "main_432":
+            #     # Disabled in --all-samples: f_80077be18 takes too long
+            #     # Program received signal SIGSEGV, Segmentation fault.
+            #     # 0x000077c207562955 in f_80077be18 () from /tmp/lib_main_432_layer_21a_pass21_safe_default.so
+            #     # (gdb) bt
+            #     #0  0x000077c207562955 in f_80077be18 () from /tmp/lib_main_432_layer_21a_pass21_safe_default.so
+            #     #1  0x0000594e3012539c in ultrs::benchmark::run_guest_fn_safely(void (*)(Cpu*), Cpu*) ()
+            #     #2  0x0000594e301563d3 in ultrs::benchmark::discover_observed_path_profiles(ultrs::benchmark::ISampleHarness*, ultrs::benchmark::SharedModuleHandle&, unsigned long) ()
+            #     #3  0x0000594e30163669 in (anonymous namespace)::benchmark_observed_profiles((anonymous namespace)::SampleBenchmarkContext&, (anonymous namespace)::LayerRow const*, (anonymous namespace)::LayerRow const*, (anonymous namespace)::LayerRow const*) ()
+            #     #4  0x0000594e2ffd105a in main ()
+            #     # too many page faults causing this to just take forever
+            #     continue
+            # if entry == "main_163_actor":
+            #     # pass
+            #     continue
             suites.append(entry)
     return suites
 
